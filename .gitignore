@@ -1,3 +1,28 @@
+CMakeLists.txt.user
+CMakeCache.txt
+CMakeFiles
+CMakeScripts
+Testing
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps
+CMakeUserPresets.json
+
+
+# Build directories
+build/
+build_debug/
+
+# Editor and OS things
+.DS_Store
+.vscode
+.vs
+*.swp
+tags
+
 # Prerequisites
 *.d
 
@@ -30,3 +55,12 @@
 *.exe
 *.out
 *.app
+
+# Include everything under input_data/
+!input_data/
+!resources/
+
+!input_data/**
+
+!resources/**
+
