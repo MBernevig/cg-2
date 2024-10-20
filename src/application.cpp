@@ -20,6 +20,9 @@ DISABLE_WARNINGS_POP()
 #include <functional>
 #include <iostream>
 #include <vector>
+#include <framework/trackball.h>
+
+std::unique_ptr<Trackball> pTrackball;
 
 class Application {
 public:
@@ -27,6 +30,8 @@ public:
         : m_window("Final Project", glm::ivec2(1024, 1024), OpenGLVersion::GL41)
         , m_texture(RESOURCE_ROOT "resources/checkerboard.png")
     {
+        pTrackball = std::make_unique<Trackball>(&m_window, glm::radians(50.0f));
+
         m_window.registerKeyCallback([this](int key, int scancode, int action, int mods) {
             if (action == GLFW_PRESS)
                 onKeyPressed(key, mods);
@@ -85,6 +90,10 @@ public:
 
             // ...
             glEnable(GL_DEPTH_TEST);
+
+            // TODO: We should change this to be actual character controls, but I hate the idea of it.
+            m_viewMatrix = pTrackball->viewMatrix();
+            m_projectionMatrix = pTrackball->projectionMatrix();
 
             const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
             // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
@@ -152,6 +161,8 @@ public:
         std::cout << "Released mouse button: " << button << std::endl;
     }
 
+
+    
 private:
     Window m_window;
 
