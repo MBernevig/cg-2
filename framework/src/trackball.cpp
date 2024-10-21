@@ -61,6 +61,11 @@ void Trackball::disableTranslation()
     m_canTranslate = false;
 }
 
+void Trackball::enableTranslation()
+{
+    m_canTranslate = true;
+}
+
 void Trackball::setCamera(const glm::vec3 lookAt, const glm::vec3 rotations, const float dist)
 {
     m_lookAt = lookAt;

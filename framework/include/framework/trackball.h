@@ -21,6 +21,7 @@ public:
 	static void printHelp();
 
 	void disableTranslation();
+	void enableTranslation();
 
 	[[nodiscard]] glm::vec3 left() const;
 	[[nodiscard]] glm::vec3 up() const;

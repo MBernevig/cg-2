@@ -21,16 +21,30 @@ DISABLE_WARNINGS_POP()
 #include <iostream>
 #include <vector>
 #include <framework/trackball.h>
+#include <camera.h>
+#include <constants.h>
 
 std::unique_ptr<Trackball> pTrackball;
+std::unique_ptr<Camera> pFlyCamera;
 
+std::vector<std::string> cameraModes = { "Trackball", "Camera" };
+enum class CameraMode {
+    Trackball,
+    Camera
+};
+
+std::vector<GPUMesh> crosshair_mesh;
+
+
+CameraMode currentCameraMode = CameraMode::Trackball;
 class Application {
 public:
     Application()
-        : m_window("Final Project", glm::ivec2(1024, 1024), OpenGLVersion::GL41)
+        : m_window("Final Project", glm::ivec2(utils::WIDTH, utils::HEIGHT), OpenGLVersion::GL41)
         , m_texture(RESOURCE_ROOT "resources/checkerboard.png")
     {
         pTrackball = std::make_unique<Trackball>(&m_window, glm::radians(50.0f));
+        pFlyCamera = std::make_unique<Camera>(&m_window, utils::START_POSITION, utils::START_LOOK_AT);
 
         m_window.registerKeyCallback([this](int key, int scancode, int action, int mods) {
             if (action == GLFW_PRESS)
@@ -46,7 +60,7 @@ public:
                 onMouseReleased(button, mods);
         });
 
-        m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/dragon.obj");
+        m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/walls.obj");
 
         try {
             ShaderBuilder defaultBuilder;
@@ -76,12 +90,31 @@ public:
             // This is your game loop
             // Put your real-time logic and rendering in here
             m_window.updateInput();
+            if(currentCameraMode == CameraMode::Camera) pFlyCamera->updateInput();
 
             // Use ImGui for easy input/output of ints, floats, strings, etc...
             ImGui::Begin("Window");
             ImGui::InputInt("This is an integer input", &dummyInteger); // Use ImGui::DragInt or ImGui::DragFloat for larger range of numbers.
             ImGui::Text("Value is: %i", dummyInteger); // Use C printf formatting rules (%i is a signed integer)
             ImGui::Checkbox("Use material if no texture", &m_useMaterial);
+            ImGui::Text("Camera Mode");
+            if (ImGui::BeginCombo("##combo", cameraModes[static_cast<int>(currentCameraMode)].c_str())) {
+                for (unsigned int n = 0; n < cameraModes.size(); n++) {
+                    bool isSelected = (currentCameraMode == static_cast<CameraMode>(n));
+                    if (ImGui::Selectable(cameraModes[n].c_str(), isSelected)) {
+                        currentCameraMode = static_cast<CameraMode>(n);
+                    }
+                    if (isSelected) {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            if(ImGui::Button("Reset FlyCamera")){
+                pFlyCamera->m_position = utils::START_POSITION;
+                pFlyCamera->m_forward = glm::normalize(utils::START_LOOK_AT - utils::START_POSITION);
+            }
+
             ImGui::End();
 
             // Clear the screen
@@ -92,8 +125,28 @@ public:
             glEnable(GL_DEPTH_TEST);
 
             // TODO: We should change this to be actual character controls, but I hate the idea of it.
-            m_viewMatrix = pTrackball->viewMatrix();
-            m_projectionMatrix = pTrackball->projectionMatrix();
+            switch (currentCameraMode) {
+                case CameraMode::Trackball:
+                    pTrackball->enableTranslation();
+                    m_viewMatrix = pTrackball->viewMatrix();
+                    m_projectionMatrix = pTrackball->projectionMatrix();
+                    break;
+                case CameraMode::Camera:
+                    pTrackball->disableTranslation();
+                    m_viewMatrix = pFlyCamera->viewMatrix();
+                    const glm::mat4 m_projection = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 90.0f);
+
+
+                    m_projectionMatrix = m_projection;
+
+                    // std::cout << "Camera forward vector: (" 
+                    //           << pCamera->m_forward.x << ", " 
+                    //           << pCamera->m_forward.y << ", " 
+                    //           << pCamera->m_forward.z << ")" << std::endl;
+                    break;
+            }
+            // m_viewMatrix = pTrackball->viewMatrix();
+            // m_projectionMatrix = pTrackball->projectionMatrix();
 
             const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
             // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
