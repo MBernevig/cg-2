@@ -27,16 +27,35 @@ DISABLE_WARNINGS_POP()
 std::unique_ptr<Trackball> pTrackball;
 std::unique_ptr<Camera> pFlyCamera;
 
-std::vector<std::string> cameraModes = { "Trackball", "Camera" };
+std::vector<std::string> cameraModes = { "Trackball", "FlyCamera" };
 enum class CameraMode {
     Trackball,
-    Camera
+    FlyCamera
 };
 
-std::vector<GPUMesh> crosshair_mesh;
+struct Light {
+	glm::vec3 position;
+	glm::vec3 color;
+	bool is_spotlight;
+	glm::vec3 direction;
+	bool has_texture;
+	Texture texture;
+
+};
+
+struct GPULight {
+    glm::vec3 position;
+	glm::vec3 color;
+	bool is_spotlight;
+	glm::vec3 direction;
+	bool has_texture;
+};
+
+std::vector<Light> lights{};
+size_t selectedLightIndex = 0;
 
 
-CameraMode currentCameraMode = CameraMode::Trackball;
+CameraMode currentCameraMode = CameraMode::FlyCamera;
 class Application {
 public:
     Application()
@@ -61,6 +80,7 @@ public:
         });
 
         m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/walls.obj");
+        lights.emplace_back(utils::DEFAULT_LIGHT);
 
         try {
             ShaderBuilder defaultBuilder;
@@ -81,6 +101,7 @@ public:
         } catch (ShaderLoadingException e) {
             std::cerr << e.what() << std::endl;
         }
+
     }
 
     void update()
@@ -90,12 +111,10 @@ public:
             // This is your game loop
             // Put your real-time logic and rendering in here
             m_window.updateInput();
-            if(currentCameraMode == CameraMode::Camera) pFlyCamera->updateInput();
+            if(currentCameraMode == CameraMode::FlyCamera) pFlyCamera->updateInput();
 
             // Use ImGui for easy input/output of ints, floats, strings, etc...
             ImGui::Begin("Window");
-            ImGui::InputInt("This is an integer input", &dummyInteger); // Use ImGui::DragInt or ImGui::DragFloat for larger range of numbers.
-            ImGui::Text("Value is: %i", dummyInteger); // Use C printf formatting rules (%i is a signed integer)
             ImGui::Checkbox("Use material if no texture", &m_useMaterial);
             ImGui::Text("Camera Mode");
             if (ImGui::BeginCombo("##combo", cameraModes[static_cast<int>(currentCameraMode)].c_str())) {
@@ -117,6 +136,22 @@ public:
 
             ImGui::End();
 
+
+            // Define the UBO for lights
+            GLuint lightUBO;
+            glGenBuffers(1, &lightUBO);
+            glBindBuffer(GL_UNIFORM_BUFFER, lightUBO);
+            // Set buffer size but don't put anything in it just yet
+            glBufferData(GL_UNIFORM_BUFFER, sizeof(Light) * 10 + 16, nullptr, GL_DYNAMIC_DRAW); // Assuming a maximum of 10 lights
+            // Put the number of lights in the first 4 bytes
+            int numberOfLights = lights.size(); // Adjust this as needed
+            glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(int), &numberOfLights);
+            // GLSL data is 16-byte aligned so the actual data starts at byte 16
+            glBufferSubData(GL_UNIFORM_BUFFER, 16, sizeof(Light) * lights.size(), lights.data());
+            glBindBuffer(GL_UNIFORM_BUFFER, 0);
+            glBindBufferBase(GL_UNIFORM_BUFFER, 0, lightUBO);
+
+
             // Clear the screen
             glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -131,7 +166,7 @@ public:
                     m_viewMatrix = pTrackball->viewMatrix();
                     m_projectionMatrix = pTrackball->projectionMatrix();
                     break;
-                case CameraMode::Camera:
+                case CameraMode::FlyCamera:
                     pTrackball->disableTranslation();
                     m_viewMatrix = pFlyCamera->viewMatrix();
                     const glm::mat4 m_projection = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 90.0f);
@@ -157,8 +192,9 @@ public:
                 m_defaultShader.bind();
                 glUniformMatrix4fv(m_defaultShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
                 //Uncomment this line when you use the modelMatrix (or fragmentPosition)
-                //glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
+                glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
                 glUniformMatrix3fv(m_defaultShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
+                m_defaultShader.bindUniformBlock("LightBlock", 0, lightUBO);
                 if (mesh.hasTextureCoords()) {
                     m_texture.bind(GL_TEXTURE0);
                     glUniform1i(m_defaultShader.getUniformLocation("colorMap"), 0);
