@@ -37,16 +37,26 @@ enum class CameraMode {
 
 std::vector<GPUMesh> crosshair_mesh;
 
-glm::vec3 quadFirst  = { 0.8f, 0.3f, -1.f };
-glm::vec3 quadSec    = { 1.5f, 0.3f, -1.f };
-glm::vec3 quadThird  = { 1.5f, 0.7f, -1.f };
-glm::vec3 quadFourth = { 0.8f, 0.7f, -1.f };
+float scaleFactor = 0.5f; 
+
+float height = 1.0f * scaleFactor;                        // Original height
+float aspectRatio = 16.0f / 9.0f;            // 16:9 aspect ratio
+float width = height * utils::ASPECT_RATIO;          // Calculate width based on height
+                   // Scale down the quad by half
+
+
+// Now update your quad vertices
+glm::vec3 quad_first  = { 1.f, 0.5f, -1.f };
+glm::vec3 quad_sec    = { 1.f + width, 0.5f, -1.f };
+glm::vec3 quad_third  = { 1.f + width, height+0.5, -1.f };
+glm::vec3 quad_fourth = { 1.f, height+0.5, -1.f };
+
 
 glm::vec3 minimap_lowcolor = {0.f,0.f,1.f};
 glm::vec3 minimap_highcolor = {1.f,0.f,0.f};
 
 
-
+float minimap_ortho_height = 25.f;
 
 CameraMode currentCameraMode = CameraMode::FlyCamera;
 class Application {
@@ -55,8 +65,8 @@ public:
         : m_window("Final Project", glm::ivec2(utils::WIDTH, utils::HEIGHT), OpenGLVersion::GL41)
         , m_texture(RESOURCE_ROOT "resources/checkerboard.png")
     {
-        pTrackball = std::make_unique<Trackball>(&m_window, glm::radians(50.0f));
-        pFlyCamera = std::make_unique<Camera>(&m_window, utils::START_POSITION, utils::START_LOOK_AT);
+        pTrackball     = std::make_unique<Trackball>(&m_window, glm::radians(50.0f));
+        pFlyCamera     = std::make_unique<Camera>(&m_window, utils::START_POSITION, utils::START_LOOK_AT);
         pMinimapCamera = std::make_unique<Camera>(&m_window, utils::START_POSITION, utils::START_LOOK_AT);
 
 
@@ -127,15 +137,15 @@ public:
         unsigned int minimapFBO;
         glGenFramebuffers(1, &minimapFBO);
 
-        const int minimapWidth = 1024, minimapHeight = 585;
+        const int minimapWidth = utils::WIDTH, minimapHeight = utils::HEIGHT;
         unsigned int minimapTex;
         glGenTextures(1, &minimapTex);
         glBindTexture(GL_TEXTURE_2D, minimapTex);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, minimapWidth, minimapHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); // Prevents shadow map artifacts.
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR); // Prevents shadow map artifacts.
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER); // Prevents shadow map artifacts.
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER); // Prevents shadow map artifacts.
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);       // Prevents shadow map artifacts.
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);       // Prevents shadow map artifacts.
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);  // Prevents shadow map artifacts.
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);  // Prevents shadow map artifacts.
         float borderColor[] = { 1.0, 1.0, 1.0, 1.0 };
         glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor); // Prevents shadow map artifacts.
         glBindTexture(GL_TEXTURE_2D, 0);
@@ -155,11 +165,14 @@ public:
             // Bind off-screen framebuffer
 			glBindFramebuffer(GL_FRAMEBUFFER, minimapFBO);
 
-            // TODO: This should be changed to an actual function in camera.cpp
-            const glm::mat4 m_projection = glm::perspective(0.9512044f, 1.75f, 0.1f, 100.0f);
+            // m_viewMatrix = pMinimapCamera->viewMatrix();
+                    // TODO: This should be changed to an actual function in camera.cpp
+            float orthoWidth = minimap_ortho_height * utils::ASPECT_RATIO;
+
+            const glm::mat4 m_projection2 = glm::ortho(-orthoWidth, orthoWidth, -minimap_ortho_height, minimap_ortho_height, 0.1f, 100.0f);
 
 
-            const glm::mat4 mvpMatrix = m_projection * pMinimapCamera->viewMatrix() * m_modelMatrix;
+            const glm::mat4 mvpMatrix = m_projection2 * pMinimapCamera->viewMatrix() * m_modelMatrix;
             // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
             // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
             const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(m_modelMatrix));
@@ -212,7 +225,7 @@ public:
             // glm::vec3 quadThird  = { 1.0f, 1.0f, -1.f };
             // glm::vec3 quadFourth = { 0.3f, 1.0f, -1.f };
             glm::vec3 quad_vertices[4] = {
-                quadFirst, quadSec, quadThird, quadFourth
+                quad_first, quad_sec, quad_third, quad_fourth
             };
 
             // Transform quad vertices with the view matrix
@@ -276,6 +289,31 @@ public:
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
         };
 
+        auto renderScene = [&](const Shader &shader) {
+            const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
+            // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
+            // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
+            const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(m_modelMatrix));
+
+             for (GPUMesh& mesh : m_meshes) {
+                shader.bind();
+                glUniformMatrix4fv(shader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
+                //Uncomment this line when you use the modelMatrix (or fragmentPosition)
+                //glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
+                glUniformMatrix3fv(shader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
+                if (mesh.hasTextureCoords()) {
+                    m_texture.bind(GL_TEXTURE0);
+                    glUniform1i(shader.getUniformLocation("colorMap"), 0);
+                    glUniform1i(shader.getUniformLocation("hasTexCoords"), GL_TRUE);
+                    glUniform1i(shader.getUniformLocation("useMaterial"), GL_FALSE);
+                } else {
+                    glUniform1i(shader.getUniformLocation("hasTexCoords"), GL_FALSE);
+                    glUniform1i(shader.getUniformLocation("useMaterial"), m_useMaterial);
+                }
+                mesh.draw(shader);
+            }
+        };
+
         while (!m_window.shouldClose()) {
             // This is your game loop
             // Put your real-time logic and rendering in here
@@ -305,20 +343,23 @@ public:
 
 
 
-            ImGui::Text("FlyCamera Position: (%.2f, %.2f, %.2f)", pFlyCamera->m_position.x, pFlyCamera->m_position.y, pFlyCamera->m_position.z);
-            ImGui::Text("FlyCamera Forward: (%.2f, %.2f, %.2f)", pFlyCamera->m_forward.x, pFlyCamera->m_forward.y, pFlyCamera->m_forward.z);
-            ImGui::Text("FlyCamera Up: (%.2f, %.2f, %.2f)", pFlyCamera->m_up.x, pFlyCamera->m_up.y, pFlyCamera->m_up.z);
-
-            ImGui::Text("MinimapCamera Up: (%.2f, %.2f, %.2f)", pMinimapCamera->m_up.x, pMinimapCamera->m_up.y, pMinimapCamera->m_up.z);
-            ImGui::Text("MinimapCamera Forward: (%.2f, %.2f, %.2f)", pMinimapCamera->m_forward.x, pMinimapCamera->m_forward.y, pMinimapCamera->m_forward.z);
-            ImGui::Text("MinimapCamera Position: (%.2f, %.2f, %.2f)", pMinimapCamera->m_position.x, pMinimapCamera->m_position.y, pMinimapCamera->m_position.z);
+            if (ImGui::CollapsingHeader("FlyCamera Info")) {
+                ImGui::Text("FlyCamera Position: (%.2f, %.2f, %.2f)", pFlyCamera->m_position.x, pFlyCamera->m_position.y, pFlyCamera->m_position.z);
+                ImGui::Text("FlyCamera Forward: (%.2f, %.2f, %.2f)", pFlyCamera->m_forward.x, pFlyCamera->m_forward.y, pFlyCamera->m_forward.z);
+                ImGui::Text("FlyCamera Up: (%.2f, %.2f, %.2f)", pFlyCamera->m_up.x, pFlyCamera->m_up.y, pFlyCamera->m_up.z);
+            }
 
             ImGui::Separator();
             ImGui::Text("Minimap");
-            ImGui::DragFloat3("Quad First", glm::value_ptr(quadFirst),   0.01f, -1.0f, 1.8f, "%.2f");
-            ImGui::DragFloat3("Quad Second", glm::value_ptr(quadSec),    0.01f, -1.0f, 1.8f, "%.2f");
-            ImGui::DragFloat3("Quad Third", glm::value_ptr(quadThird),   0.01f, -1.0f, 1.8f, "%.2f");
-            ImGui::DragFloat3("Quad Fourth", glm::value_ptr(quadFourth), 0.01f, -1.0f, 1.8f, "%.2f");
+            ImGui::DragFloat("Ortho Height", &minimap_ortho_height, 0.1f, 1.0f, 80.0f, "%.1f");
+            if (ImGui::CollapsingHeader("Minimap Position")) {
+                ImGui::DragFloat3("Quad First", glm::value_ptr(quad_first),   0.01f, -1.0f, 1.8f, "%.2f");
+                ImGui::DragFloat3("Quad Second", glm::value_ptr(quad_sec),    0.01f, -1.0f, 1.8f, "%.2f");
+                ImGui::DragFloat3("Quad Third", glm::value_ptr(quad_third),   0.01f, -1.0f, 1.8f, "%.2f");
+                ImGui::DragFloat3("Quad Fourth", glm::value_ptr(quad_fourth), 0.01f, -1.0f, 1.8f, "%.2f");
+            }
+
+
             ImGui::End();
 
             // Clear the screen
@@ -347,42 +388,24 @@ public:
 
                     m_viewMatrix = pMinimapCamera->viewMatrix();
                     // TODO: This should be changed to an actual function in camera.cpp
-                    const glm::mat4 m_projection2 = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 100.0f);
+                    float orthoWidth = minimap_ortho_height * utils::ASPECT_RATIO;
+
+                    const glm::mat4 m_projection2 = glm::ortho(-orthoWidth, orthoWidth, -minimap_ortho_height, minimap_ortho_height, 0.1f, 100.0f);
                     m_projectionMatrix = m_projection2;
             }
             // m_viewMatrix = pTrackball->viewMatrix();
             // m_projectionMatrix = pTrackball->projectionMatrix();
 
-            pMinimapCamera->m_position = pFlyCamera->m_position + glm::vec3(0.f, 30.f, 0.f);
-            pMinimapCamera->m_forward = glm::vec3(0.f, -1.f, 0.f);
+            pMinimapCamera->m_position = pFlyCamera->m_position;
+            pMinimapCamera->m_forward  = glm::vec3(0.f, -1.f, 0.f);
             glm::vec3 interim = pFlyCamera->m_forward;
             pMinimapCamera->m_up = glm::vec3(interim.x, 0.f, interim.z);
-            pMinimapCamera->m_position += pMinimapCamera->m_up * 0.2f;
 
-            const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
-            // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
-            // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
-            const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(m_modelMatrix));
+            
 
             renderMinimapTexture();
 
-            for (GPUMesh& mesh : m_meshes) {
-                m_defaultShader.bind();
-                glUniformMatrix4fv(m_defaultShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
-                //Uncomment this line when you use the modelMatrix (or fragmentPosition)
-                //glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
-                glUniformMatrix3fv(m_defaultShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
-                if (mesh.hasTextureCoords()) {
-                    m_texture.bind(GL_TEXTURE0);
-                    glUniform1i(m_defaultShader.getUniformLocation("colorMap"), 0);
-                    glUniform1i(m_defaultShader.getUniformLocation("hasTexCoords"), GL_TRUE);
-                    glUniform1i(m_defaultShader.getUniformLocation("useMaterial"), GL_FALSE);
-                } else {
-                    glUniform1i(m_defaultShader.getUniformLocation("hasTexCoords"), GL_FALSE);
-                    glUniform1i(m_defaultShader.getUniformLocation("useMaterial"), m_useMaterial);
-                }
-                mesh.draw(m_defaultShader);
-            }
+            renderScene(m_defaultShader);
 
             //render quad
 
