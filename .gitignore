@@ -15,6 +15,7 @@ CMakeUserPresets.json
 # Build directories
 build/
 build_debug/
+buildlinux/
 
 # Editor and OS things
 .DS_Store

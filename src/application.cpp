@@ -487,8 +487,7 @@ public:
                 pTrackball->disableTranslation();
                 m_viewMatrix = pFlyCamera->viewMatrix();
                 // TODO: This should be changed to an actual function in camera.cpp
-                const glm::mat4 m_projection = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 100.0f);
-                m_projectionMatrix = m_projection;
+                m_projectionMatrix = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 100.0f);
                 break;
             case CameraMode::MinimapCamera:
 
