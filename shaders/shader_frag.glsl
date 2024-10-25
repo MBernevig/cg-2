@@ -49,4 +49,6 @@ void main()
 
         fragColor += vec4(diffuse, 1.f);
     }
+
+    fragColor = vec4(fullColor, 1.f);
 }
