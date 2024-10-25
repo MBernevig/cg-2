@@ -24,6 +24,10 @@ DISABLE_WARNINGS_POP()
 #include <camera.h>
 #include <constants.h>
 
+
+const float fixedTimeStep = 0.016f; // 60 ticks per sec
+float frameTimeAccumulator = 0.0f; // use this to add up skipped timesteps
+
 std::unique_ptr<Trackball> pTrackball;
 std::unique_ptr<Camera> pFlyCamera;
 std::unique_ptr<Camera> pMinimapCamera;
@@ -353,9 +357,6 @@ public:
 
         auto renderScene = [&](const Shader &shader)
         {
-
-            
-
             for (GPUMesh &mesh : m_meshes)
             {
                 const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * mesh.modelMatrix;
@@ -386,8 +387,9 @@ public:
             }
         };
 
-        auto renderMeshes = [&](const Shader &shader, std::vector<GPUMesh> &meshes, Texture &texture) {
-            for ( GPUMesh &mesh : meshes)
+        auto renderMeshes = [&](const Shader &shader, std::vector<GPUMesh> &meshes, Texture &texture)
+        {
+            for (GPUMesh &mesh : meshes)
             {
                 const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * mesh.modelMatrix;
                 // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
@@ -417,10 +419,33 @@ public:
             }
         };
         // GAME LOOP ****************************************************************************************************
+
+        std::vector<GPUMesh> fireMesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/fireframes/firecube.obj");
+        std::vector<Texture> fireTextures;
+        fireTextures.push_back(Texture(RESOURCE_ROOT "resources/fireframes/frame1.png"));
+        fireTextures.push_back(Texture(RESOURCE_ROOT "resources/fireframes/frame2.png"));
+        fireTextures.push_back(Texture(RESOURCE_ROOT "resources/fireframes/frame3.png"));
+
+        Texture* activeFireTexture = &fireTextures[0];
+        int frameCounter = 0;
+
+        float previousTime = static_cast<float>(glfwGetTime());
         while (!m_window.shouldClose())
         {
             // This is your game loop
             // Put your real-time logic and rendering in here
+
+            float currentTime = static_cast<float>(glfwGetTime());
+            float frameTime = currentTime - previousTime;
+            previousTime = currentTime;
+            frameTimeAccumulator += frameTime;
+
+            while(frameTimeAccumulator >= fixedTimeStep) {
+
+                frameCounter++;
+                activeFireTexture = &fireTextures[((int) frameCounter/20) % fireTextures.size()];
+                frameTimeAccumulator -= fixedTimeStep;
+            }
 
             ImGuiIO& io = ImGui::GetIO();
 
@@ -437,99 +462,112 @@ public:
                     break;
             }
 
-            // Use ImGui for easy input/output of ints, floats, strings, etc...
-            ImGui::Begin("Window");
-            ImGui::Checkbox("Use material if no texture", &m_useMaterial);
-            ImGui::Text("Camera Mode");
-            if (ImGui::BeginCombo("##combo", cameraModes[static_cast<int>(currentCameraMode)].c_str()))
-            {
-                for (unsigned int n = 0; n < cameraModes.size(); n++)
+            { // Use ImGui for easy input/output of ints, floats, strings, etc...
+                ImGui::Begin("Window");
+                ImGui::Checkbox("Use material if no texture", &m_useMaterial);
+                ImGui::Text("Camera Mode");
+                if (ImGui::BeginCombo("##combo", cameraModes[static_cast<int>(currentCameraMode)].c_str()))
                 {
-                    bool isSelected = (currentCameraMode == static_cast<CameraMode>(n));
-                    if (ImGui::Selectable(cameraModes[n].c_str(), isSelected))
+                    for (unsigned int n = 0; n < cameraModes.size(); n++)
                     {
-                        currentCameraMode = static_cast<CameraMode>(n);
+                        bool isSelected = (currentCameraMode == static_cast<CameraMode>(n));
+                        if (ImGui::Selectable(cameraModes[n].c_str(), isSelected))
+                        {
+                            currentCameraMode = static_cast<CameraMode>(n);
+                        }
+                        if (isSelected)
+                        {
+                            ImGui::SetItemDefaultFocus();
+                        }
                     }
-                    if (isSelected)
-                    {
-                        ImGui::SetItemDefaultFocus();
-                    }
+                    ImGui::EndCombo();
                 }
-                ImGui::EndCombo();
-            }
-            if (ImGui::Button("Reset FlyCamera"))
-            {
-                pFlyCamera->m_position = utils::START_POSITION;
-                pFlyCamera->m_forward = glm::normalize(utils::START_LOOK_AT - utils::START_POSITION);
-            }
-
-            if (ImGui::CollapsingHeader("Third Person Camera"))
-            {
-                ImGui::DragFloat("Follow Distance", &followDistance, 0.1f, 0.0f, 20.0f, "%.1f");
-                ImGui::DragFloat("Height Offset", &heightOffset, 0.1f, 0.0f, 20.0f, "%.1f");
-                ImGui::DragFloat("Side Offset", &sideOffset, 0.1f, -10.0f, 10.0f, "%.1f");
-                ImGui::DragFloat3("Character Offset", glm::value_ptr(characterOffset), 0.1f, -10.0f, 10.0f, "%.1f");
-            }
-
-            if (ImGui::CollapsingHeader("FlyCamera Info"))
-            {
-                ImGui::Text("FlyCamera Position: (%.2f, %.2f, %.2f)", pFlyCamera->m_position.x, pFlyCamera->m_position.y, pFlyCamera->m_position.z);
-                ImGui::Text("FlyCamera Forward: (%.2f, %.2f, %.2f)", pFlyCamera->m_forward.x, pFlyCamera->m_forward.y, pFlyCamera->m_forward.z);
-                ImGui::Text("FlyCamera Up: (%.2f, %.2f, %.2f)", pFlyCamera->m_up.x, pFlyCamera->m_up.y, pFlyCamera->m_up.z);
-            }
-
-            ImGui::Separator();
-            if(ImGui::CollapsingHeader("Minimap")){
-                ImGui::DragFloat("Ortho Height", &minimap_ortho_height, 0.1f, 1.0f, 80.0f, "%.1f");
-                if (ImGui::CollapsingHeader("Minimap Position"))
+                if (ImGui::Button("Reset FlyCamera"))
                 {
-                    ImGui::DragFloat3("Quad First", glm::value_ptr(quad_first), 0.01f, -1.0f, 1.8f, "%.2f");
-                    ImGui::DragFloat3("Quad Second", glm::value_ptr(quad_sec), 0.01f, -1.0f, 1.8f, "%.2f");
-                    ImGui::DragFloat3("Quad Third", glm::value_ptr(quad_third), 0.01f, -1.0f, 1.8f, "%.2f");
-                    ImGui::DragFloat3("Quad Fourth", glm::value_ptr(quad_fourth), 0.01f, -1.0f, 1.8f, "%.2f");
-                }
-            }
-
-
-            if(ImGui::CollapsingHeader("Lights")){
-                // Display lights in scene
-                std::vector<std::string> itemStrings = {};
-                for (size_t i = 0; i < lights.size(); i++) {
-                    auto string = "Light " + std::to_string(i) + "|R " + std::to_string(lights[i].color.r).substr(0, 5) + " |G" + std::to_string(lights[i].color.g).substr(0, 5) + " |B " + std::to_string(lights[i].color.b).substr(0, 5);
-                    itemStrings.push_back(string);
+                    pFlyCamera->m_position = utils::START_POSITION;
+                    pFlyCamera->m_forward = glm::normalize(utils::START_LOOK_AT - utils::START_POSITION);
                 }
 
-                std::vector<const char*> itemCStrings = {};
-                for (const auto& string : itemStrings) {
-                    itemCStrings.push_back(string.c_str());
+                if (ImGui::CollapsingHeader("Third Person Camera"))
+                {
+                    ImGui::DragFloat("Follow Distance", &followDistance, 0.1f, 0.0f, 20.0f, "%.1f");
+                    ImGui::DragFloat("Height Offset", &heightOffset, 0.1f, 0.0f, 20.0f, "%.1f");
+                    ImGui::DragFloat("Side Offset", &sideOffset, 0.1f, -10.0f, 10.0f, "%.1f");
+                    ImGui::DragFloat3("Character Offset", glm::value_ptr(characterOffset), 0.1f, -10.0f, 10.0f, "%.1f");
                 }
 
-                int tempSelectedItem = static_cast<int>(selectedLightIndex);
-                if (ImGui::ListBox("Lights", &tempSelectedItem, itemCStrings.data(), (int)itemCStrings.size(), 4)) {
-                    selectedLightIndex = static_cast<size_t>(tempSelectedItem);
+                if (ImGui::CollapsingHeader("FlyCamera Info"))
+                {
+                    ImGui::Text("FlyCamera Position: (%.2f, %.2f, %.2f)", pFlyCamera->m_position.x, pFlyCamera->m_position.y, pFlyCamera->m_position.z);
+                    ImGui::Text("FlyCamera Forward: (%.2f, %.2f, %.2f)", pFlyCamera->m_forward.x, pFlyCamera->m_forward.y, pFlyCamera->m_forward.z);
+                    ImGui::Text("FlyCamera Up: (%.2f, %.2f, %.2f)", pFlyCamera->m_up.x, pFlyCamera->m_up.y, pFlyCamera->m_up.z);
                 }
 
-                if (ImGui::Button("Add Light")) {
-                    lights.push_back(Light{ glm::vec4(0, 0, 3, 0.f), glm::vec4(1) });
-                    selectedLightIndex = lights.size() - 1;
-                }
-
-                ImGui::SameLine();
-                if (ImGui::Button("Remove Light")) {
-                    if (lights.size() > 1) {
-                        lights.erase(lights.begin() + selectedLightIndex);
-                        selectedLightIndex = 0;
+                ImGui::Separator();
+                if (ImGui::CollapsingHeader("Minimap"))
+                {
+                    ImGui::DragFloat("Ortho Height", &minimap_ortho_height, 0.1f, 1.0f, 80.0f, "%.1f");
+                    if (ImGui::CollapsingHeader("Minimap Position"))
+                    {
+                        ImGui::DragFloat3("Quad First", glm::value_ptr(quad_first), 0.01f, -1.0f, 1.8f, "%.2f");
+                        ImGui::DragFloat3("Quad Second", glm::value_ptr(quad_sec), 0.01f, -1.0f, 1.8f, "%.2f");
+                        ImGui::DragFloat3("Quad Third", glm::value_ptr(quad_third), 0.01f, -1.0f, 1.8f, "%.2f");
+                        ImGui::DragFloat3("Quad Fourth", glm::value_ptr(quad_fourth), 0.01f, -1.0f, 1.8f, "%.2f");
                     }
                 }
 
-                //Slider for selected camera pos
-                ImGui::DragFloat4("Position", glm::value_ptr(lights[selectedLightIndex].position), 0.1f, -10.0f, 10.0f);
+                if (ImGui::CollapsingHeader("Lights"))
+                {
+                    // Display lights in scene
+                    std::vector<std::string> itemStrings = {};
+                    for (size_t i = 0; i < lights.size(); i++)
+                    {
+                        auto string = "Light " + std::to_string(i) + "|R " + std::to_string(lights[i].color.r).substr(0, 5) + " |G" + std::to_string(lights[i].color.g).substr(0, 5) + " |B " + std::to_string(lights[i].color.b).substr(0, 5);
+                        itemStrings.push_back(string);
+                    }
 
-                //Color picker for selected light
-                ImGui::ColorEdit4("Color", &lights[selectedLightIndex].color[0]);
-                refreshLightsUBO();
+                    std::vector<const char *> itemCStrings = {};
+                    for (const auto &string : itemStrings)
+                    {
+                        itemCStrings.push_back(string.c_str());
+                    }
+
+                    int tempSelectedItem = static_cast<int>(selectedLightIndex);
+                    if (ImGui::ListBox("Lights", &tempSelectedItem, itemCStrings.data(), (int)itemCStrings.size(), 4))
+                    {
+                        selectedLightIndex = static_cast<size_t>(tempSelectedItem);
+                    }
+
+                    if (ImGui::Button("Add Light"))
+                    {
+                        lights.push_back(Light{glm::vec4(0, 0, 3, 0.f), glm::vec4(1)});
+                        selectedLightIndex = lights.size() - 1;
+                    }
+
+                    ImGui::SameLine();
+                    if (ImGui::Button("Remove Light"))
+                    {
+                        if (lights.size() > 1)
+                        {
+                            lights.erase(lights.begin() + selectedLightIndex);
+                            selectedLightIndex = 0;
+                        }
+                    }
+
+                    ImGui::SameLine();
+                    if (ImGui::Button("Move Light to Camera")) {
+                        lights[selectedLightIndex].position = glm::vec4(pFlyCamera->m_position, 1.0f);
+                    }
+
+                    // Slider for selected camera pos
+                    ImGui::DragFloat4("Position", glm::value_ptr(lights[selectedLightIndex].position), 0.1f, -10.0f, 10.0f);
+
+                    // Color picker for selected light
+                    ImGui::ColorEdit4("Color", &lights[selectedLightIndex].color[0]);
+                    refreshLightsUBO();
+                }
+                ImGui::End();
             }
-            ImGui::End();
 
             // Clear the screen
             glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -569,7 +607,7 @@ public:
                 m_projectionMatrix = m_projection2;
             }
 
-            {
+            { // MINIMAP
                 pMinimapCamera->m_position = pFlyCamera->m_position;
                 pMinimapCamera->m_forward = glm::vec3(0.f, -1.f, 0.f);
                 pMinimapCamera->m_up = glm::vec3(pFlyCamera->m_forward.x, 0.f, pFlyCamera->m_forward.z);
@@ -607,7 +645,7 @@ public:
 
             renderScene(m_defaultShader);
 
-            
+            renderMeshes(m_defaultShader, fireMesh, *activeFireTexture);
 
             // render quad
 
