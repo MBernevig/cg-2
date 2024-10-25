@@ -40,7 +40,7 @@ void main()
     else if (useMaterial)   { fullColor = vec3(kd);}
     else                    { fragColor = vec4(normal, 1); return;} // Output color value, change from (1, 0, 0) to something else
 
-
+    fragColor = vec4(0.f);
 
     for(int i = 0; i<light_count; i++){
         vec3 lightDir = normalize(lights[i].position.rgb - fragPosition);
