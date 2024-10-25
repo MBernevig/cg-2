@@ -57,11 +57,25 @@ glm::vec3 minimap_highcolor = {1.f, 0.f, 0.f};
 float minimap_ortho_height = 25.f;
 
 CameraMode currentCameraMode = CameraMode::FlyCamera;
+
+// UBOs must always use vec4s, vec2s, or scalars, NEVER vec3 
+// https://stackoverflow.com/questions/38172696/should-i-ever-use-a-vec3-inside-of-a-uniform-buffer-or-shader-storage-buffer-o
+// This is very annoying.
+struct Light {
+    glm::vec4 position;
+    glm::vec4 color;
+};
+
+std::vector<Light> lights = {{glm::vec4(3.f, 8.f, -10.f, -0.f), glm::vec4(1.f, 1.f, 1.f, 0.f)}};
+
+int selectedLightIndex = 0;
+
+
 class Application
 {
 public:
     Application()
-        : m_window("Final Project", glm::ivec2(utils::WIDTH, utils::HEIGHT), OpenGLVersion::GL41), m_texture(RESOURCE_ROOT "resources/checkerboard.png")
+        : m_window("Final Project", glm::ivec2(utils::WIDTH, utils::HEIGHT), OpenGLVersion::GL41), m_texture(RESOURCE_ROOT "resources/pattern.png")
     {
         pTrackball = std::make_unique<Trackball>(&m_window, glm::radians(50.0f));
         pFlyCamera = std::make_unique<Camera>(&m_window, utils::START_POSITION, utils::START_LOOK_AT);
@@ -81,7 +95,7 @@ public:
             else if (action == GLFW_RELEASE)
                 onMouseReleased(button, mods); });
 
-        m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/walls.obj");
+        m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/scene1.obj");
 
         try
         {
@@ -132,8 +146,7 @@ public:
     void update()
     {
 
-        // create fbo and texture
-        //  Create a texture for shadow mapping
+        // MINIMAP INITs ***********************************************************************************************
         unsigned int minimapFBO;
         glGenFramebuffers(1, &minimapFBO);
 
@@ -158,6 +171,38 @@ public:
 
         Texture minimapOverlay = Texture(RESOURCE_ROOT "resources/map_overlay.png");
 
+        // END MINIMAP INITs ********************************************************************************************
+
+        // LIGHT UBO ****************************************************************************************************
+        int number_of_lights = (int) lights.size();
+
+        GLuint lightUBO;
+        glGenBuffers(1, &lightUBO);
+        glBindBuffer(GL_UNIFORM_BUFFER, lightUBO);
+        //Set buffer size
+        glBufferData(GL_UNIFORM_BUFFER, number_of_lights * sizeof(Light) + 16, NULL, GL_DYNAMIC_DRAW);
+        //Number of lights goes into first 4 bytes
+        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(int), &number_of_lights);
+        //Now the light data
+        glBufferSubData(GL_UNIFORM_BUFFER, 16, number_of_lights * sizeof(Light), lights.data());
+        //Unbind buffer
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+        // For updating lights
+        auto refreshLightsUBO = [&] {
+            int number_of_lights = (int) lights.size();
+             glBindBuffer(GL_UNIFORM_BUFFER, lightUBO);
+            //Set buffer size
+            glBufferData(GL_UNIFORM_BUFFER, number_of_lights * sizeof(Light) + 16, NULL, GL_DYNAMIC_DRAW);
+            //Number of lights goes into first 4 bytes
+            glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(int), &number_of_lights);
+            //Now the light data
+            glBufferSubData(GL_UNIFORM_BUFFER, 16, number_of_lights * sizeof(Light), lights.data());
+            //Unbind buffer
+            glBindBuffer(GL_UNIFORM_BUFFER, 0);
+        };
+        // END LIGHT UBO ************************************************************************************************
+        // RENDER FUNCTIONS *********************************************************************************************
         auto renderMinimapTexture = [&]
         {
             glEnable(GL_DEPTH_TEST);
@@ -292,6 +337,7 @@ public:
 
         auto renderScene = [&](const Shader &shader)
         {
+
             const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
             // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
             // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
@@ -300,6 +346,9 @@ public:
             for (GPUMesh &mesh : m_meshes)
             {
                 shader.bind();
+                //!! IMPORTANT -> mesh.draw binds material to block 0, we bind lightBuffer to 1 instead.
+                shader.bindUniformBlock("lightBuffer", 1, lightUBO);
+                glUniform3fv(shader.getUniformLocation("cameraPosition"), 1, glm::value_ptr(pFlyCamera->cameraPos()));
                 glUniformMatrix4fv(shader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
                 // Uncomment this line when you use the modelMatrix (or fragmentPosition)
                 // glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
@@ -319,14 +368,18 @@ public:
                 mesh.draw(shader);
             }
         };
-
+        // GAME LOOP ****************************************************************************************************
         while (!m_window.shouldClose())
         {
             // This is your game loop
             // Put your real-time logic and rendering in here
+
+            ImGuiIO& io = ImGui::GetIO();
+
             m_window.updateInput();
             if (currentCameraMode == CameraMode::FlyCamera || currentCameraMode == CameraMode::MinimapCamera)
-                pFlyCamera->updateInput();
+                if(!io.WantCaptureMouse)
+                    pFlyCamera->updateInput();
 
             // Use ImGui for easy input/output of ints, floats, strings, etc...
             ImGui::Begin("Window");
@@ -362,16 +415,56 @@ public:
             }
 
             ImGui::Separator();
-            ImGui::Text("Minimap");
-            ImGui::DragFloat("Ortho Height", &minimap_ortho_height, 0.1f, 1.0f, 80.0f, "%.1f");
-            if (ImGui::CollapsingHeader("Minimap Position"))
-            {
-                ImGui::DragFloat3("Quad First", glm::value_ptr(quad_first), 0.01f, -1.0f, 1.8f, "%.2f");
-                ImGui::DragFloat3("Quad Second", glm::value_ptr(quad_sec), 0.01f, -1.0f, 1.8f, "%.2f");
-                ImGui::DragFloat3("Quad Third", glm::value_ptr(quad_third), 0.01f, -1.0f, 1.8f, "%.2f");
-                ImGui::DragFloat3("Quad Fourth", glm::value_ptr(quad_fourth), 0.01f, -1.0f, 1.8f, "%.2f");
+            if(ImGui::CollapsingHeader("Minimap")){
+                ImGui::DragFloat("Ortho Height", &minimap_ortho_height, 0.1f, 1.0f, 80.0f, "%.1f");
+                if (ImGui::CollapsingHeader("Minimap Position"))
+                {
+                    ImGui::DragFloat3("Quad First", glm::value_ptr(quad_first), 0.01f, -1.0f, 1.8f, "%.2f");
+                    ImGui::DragFloat3("Quad Second", glm::value_ptr(quad_sec), 0.01f, -1.0f, 1.8f, "%.2f");
+                    ImGui::DragFloat3("Quad Third", glm::value_ptr(quad_third), 0.01f, -1.0f, 1.8f, "%.2f");
+                    ImGui::DragFloat3("Quad Fourth", glm::value_ptr(quad_fourth), 0.01f, -1.0f, 1.8f, "%.2f");
+                }
             }
 
+
+            if(ImGui::CollapsingHeader("Lights")){
+                // Display lights in scene
+                std::vector<std::string> itemStrings = {};
+                for (size_t i = 0; i < lights.size(); i++) {
+                    auto string = "Light " + std::to_string(i) + "|R " + std::to_string(lights[i].color.r).substr(0, 5) + " |G" + std::to_string(lights[i].color.g).substr(0, 5) + " |B " + std::to_string(lights[i].color.b).substr(0, 5);
+                    itemStrings.push_back(string);
+                }
+
+                std::vector<const char*> itemCStrings = {};
+                for (const auto& string : itemStrings) {
+                    itemCStrings.push_back(string.c_str());
+                }
+
+                int tempSelectedItem = static_cast<int>(selectedLightIndex);
+                if (ImGui::ListBox("Lights", &tempSelectedItem, itemCStrings.data(), (int)itemCStrings.size(), 4)) {
+                    selectedLightIndex = static_cast<size_t>(tempSelectedItem);
+                }
+
+                if (ImGui::Button("Add Light")) {
+                    lights.push_back(Light{ glm::vec4(0, 0, 3, 0.f), glm::vec4(1) });
+                    selectedLightIndex = lights.size() - 1;
+                }
+
+                ImGui::SameLine();
+                if (ImGui::Button("Remove Light")) {
+                    if (lights.size() > 1) {
+                        lights.erase(lights.begin() + selectedLightIndex);
+                        selectedLightIndex = 0;
+                    }
+                }
+
+                //Slider for selected camera pos
+                ImGui::DragFloat4("Position", glm::value_ptr(lights[selectedLightIndex].position), 0.1f, -10.0f, 10.0f);
+
+                //Color picker for selected light
+                ImGui::ColorEdit4("Color", &lights[selectedLightIndex].color[0]);
+                refreshLightsUBO();
+            }
             ImGui::End();
 
             // Clear the screen
