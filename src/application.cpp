@@ -171,6 +171,15 @@ public:
 
         Texture minimapOverlay = Texture(RESOURCE_ROOT "resources/map_overlay.png");
 
+        GLuint quad_vbo;
+        glGenBuffers(1, &quad_vbo);
+        GLuint tex_vbo;
+        glGenBuffers(1, &tex_vbo);
+        GLuint quad_vao;
+        glGenVertexArrays(1, &quad_vao);
+        GLuint quad_ibo;
+        glGenBuffers(1, &quad_ibo);
+
         // END MINIMAP INITs ********************************************************************************************
 
         // LIGHT UBO ****************************************************************************************************
@@ -289,20 +298,15 @@ public:
             };
 
             // Create and bind the vertex buffer object (VBO) for positions
-            GLuint quad_vbo;
-            glGenBuffers(1, &quad_vbo);
+            
             glBindBuffer(GL_ARRAY_BUFFER, quad_vbo);
             glBufferData(GL_ARRAY_BUFFER, 4 * sizeof(glm::vec3), quad_vertices, GL_STATIC_DRAW);
 
             // Create and bind the VBO for texture coordinates
-            GLuint tex_vbo;
-            glGenBuffers(1, &tex_vbo);
             glBindBuffer(GL_ARRAY_BUFFER, tex_vbo);
             glBufferData(GL_ARRAY_BUFFER, 4 * sizeof(glm::vec2), quad_tex_coords, GL_STATIC_DRAW);
 
             // Set up the vertex array object (VAO)
-            GLuint quad_vao;
-            glGenVertexArrays(1, &quad_vao);
             glBindVertexArray(quad_vao);
 
             // Bind the vertex position VBO
@@ -315,8 +319,6 @@ public:
             glEnableVertexAttribArray(1); // Layout location 1 (texture coordinates)
             glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(glm::vec2), (void *)0);
 
-            GLuint quad_ibo;
-            glGenBuffers(1, &quad_ibo);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad_ibo);
             glBufferData(GL_ELEMENT_ARRAY_BUFFER, 6 * sizeof(int), quad_indices, GL_STATIC_DRAW);
             // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0); // Do not unbind the element array buffer
@@ -487,8 +489,7 @@ public:
                 pTrackball->disableTranslation();
                 m_viewMatrix = pFlyCamera->viewMatrix();
                 // TODO: This should be changed to an actual function in camera.cpp
-                const glm::mat4 m_projection = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 100.0f);
-                m_projectionMatrix = m_projection;
+                m_projectionMatrix = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 100.0f);
                 break;
             case CameraMode::MinimapCamera:
 
