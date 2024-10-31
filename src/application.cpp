@@ -131,6 +131,11 @@ public:
             m_minimapShader = minimapBuilder.build();
             std::cout << "Built m_minimapShader" << std::endl;
 
+            ShaderBuilder lightBuilder;
+            lightBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/light_vertex.glsl");
+            lightBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/light_frag.glsl");
+            m_lightShader = lightBuilder.build();
+
             // Any new shaders can be added below in similar fashion.
             // ==> Don't forget to reconfigure CMake when you do!
             //     Visual Studio: PROJECT => Generate Cache for ComputerGraphics
@@ -196,6 +201,22 @@ public:
         glBufferSubData(GL_UNIFORM_BUFFER, 16, number_of_lights * sizeof(Light), lights.data());
         //Unbind buffer
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+        
+        GLuint lightVAO, lightVBO;
+        glGenVertexArrays(1, &lightVAO);
+        glGenVertexArrays(1, &lightVBO);
+        
+        glBindVertexArray(lightVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, lightVBO);
+
+        glBufferData(GL_ARRAY_BUFFER, lights.size() * sizeof(glm::vec4), lights.data(), GL_DYNAMIC_DRAW);
+        
+        glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(Light), (void*) offsetof(Light, position));
+        glEnableVertexAttribArray(0);
+        
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindVertexArray(0);
 
         // For updating lights
         auto refreshLightsUBO = [&] {
@@ -516,10 +537,58 @@ public:
 
             renderMinimap();
             // Processes input and swaps the window buffer
+
+            // draw debug lights
+            {
+                glBindBuffer(GL_ARRAY_BUFFER, lightVBO);
+                glBufferData(GL_ARRAY_BUFFER, lights.size() * sizeof(glm::vec4), lights.data(), GL_DYNAMIC_DRAW);
+
+                m_lightShader.bind();
+
+                const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
+                glEnable(GL_PROGRAM_POINT_SIZE);
+                glUniformMatrix4fv(m_lightShader.getUniformLocation("mvp"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
+
+                glBindVertexArray(lightVAO);
+                glDrawArrays(GL_POINTS, 0, lights.size());
+                glBindBuffer(GL_ARRAY_BUFFER, 0);
+                glBindVertexArray(0);
+            }
+            // draw_lights(m_lightShader, lightVAO, m_projectionMatrix * m_viewMatrix * m_modelMatrix);
+            
             m_window.swapBuffers();
         }
     }
 
+void draw_lights(const Shader& lightShader, GLuint lightVAO, const glm::mat4& mvp) {
+    // Draw lights as (square) points.
+    //glDepthMask(GL_FALSE);
+    lightShader.bind();
+    // {
+    //     const glm::vec4 screenPos = mvp * glm::vec4(lights[selectedLightIndex].position);
+    //     constexpr glm::vec3 color { 1, 1, 0 };
+    //
+    //     glPointSize(40.0f);
+    //     glUniform4fv(lightShader.getUniformLocation("pos"), 1, glm::value_ptr(screenPos));
+    //     glUniform3fv(lightShader.getUniformLocation("color"), 1, glm::value_ptr(color));
+    //     // glBindVertexArray(vao);
+    //     glDrawArrays(GL_POINTS, 0, 1);
+    //     // glBindVertexArray(0);
+    // }
+        // glBindBuffer(GL_ARRAY_BUFFER)
+    for (const Light& light : lights) {
+        const glm::vec4 screenPos = mvp * light.position;
+        // const glm::vec3 color { 1, 0, 0 };
+
+        glPointSize(10.0f);
+        glUniform4fv(lightShader.getUniformLocation("pos"), 1, glm::value_ptr(screenPos));
+        glUniform3fv(lightShader.getUniformLocation("color"), 1, glm::value_ptr(light.color));
+        // glBindVertexArray(vao);
+        glDrawArrays(GL_POINTS, 0, 1);
+        // glBindVertexArray(0);
+    }
+}
+    
     // In here you can handle key presses
     // key - Integer that corresponds to numbers in https://www.glfw.org/docs/latest/group__keys.html
     // mods - Any modifier keys pressed, like shift or control
@@ -566,6 +635,7 @@ private:
     Shader m_shadowShader;
     Shader m_quadShader;
     Shader m_minimapShader;
+    Shader m_lightShader;
 
     std::vector<GPUMesh> m_meshes;
     Texture m_texture;
