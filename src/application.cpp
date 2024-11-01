@@ -24,17 +24,29 @@ DISABLE_WARNINGS_POP()
 #include <camera.h>
 #include <constants.h>
 
+
+const float fixedTimeStep = 0.016f; // 60 ticks per sec
+float frameTimeAccumulator = 0.0f; // use this to add up skipped timesteps
+
 std::unique_ptr<Trackball> pTrackball;
 std::unique_ptr<Camera> pFlyCamera;
 std::unique_ptr<Camera> pMinimapCamera;
+std::unique_ptr<Camera> pTppCamera;
 
-std::vector<std::string> cameraModes = {"Trackball", "FlyCamera", "MinimapCamera"};
+std::vector<std::string> cameraModes = {"Trackball", "FlyCamera", "Third Person Camera", "MinimapCamera"};
 enum class CameraMode
 {
     Trackball,
     FlyCamera,
+    ThirdPersonCamera,
     MinimapCamera
 };
+
+
+float followDistance = 5.0f;  // Distance behind the character
+float heightOffset = 1.5f;    // Height above the character
+float sideOffset = 1.5f;      // Offset to the side (positive for right, negative for left)
+glm::vec3 characterOffset = glm::vec3(0.f,0.f,0.f);
 
 std::vector<GPUMesh> crosshair_mesh;
 
@@ -56,6 +68,8 @@ glm::vec3 minimap_highcolor = {1.f, 0.f, 0.f};
 
 float minimap_ortho_height = 25.f;
 
+bool show_map = false;
+
 CameraMode currentCameraMode = CameraMode::FlyCamera;
 
 // UBOs must always use vec4s, vec2s, or scalars, NEVER vec3 
@@ -75,11 +89,12 @@ class Application
 {
 public:
     Application()
-        : m_window("Final Project", glm::ivec2(utils::WIDTH, utils::HEIGHT), OpenGLVersion::GL41), m_texture(RESOURCE_ROOT "resources/pattern.png")
+        : m_window("Final Project", glm::ivec2(utils::WIDTH, utils::HEIGHT), OpenGLVersion::GL41), m_texture(RESOURCE_ROOT "resources/pattern.png"), characterTexture(RESOURCE_ROOT "resources/doggos.jpg")
     {
         pTrackball = std::make_unique<Trackball>(&m_window, glm::radians(50.0f));
         pFlyCamera = std::make_unique<Camera>(&m_window, utils::START_POSITION, utils::START_LOOK_AT);
         pMinimapCamera = std::make_unique<Camera>(&m_window, utils::START_POSITION, utils::START_LOOK_AT);
+        pTppCamera = std::make_unique<Camera>(&m_window, utils::START_POSITION, utils::START_LOOK_AT);
 
         m_window.registerKeyCallback([this](int key, int scancode, int action, int mods)
                                      {
@@ -96,6 +111,8 @@ public:
                 onMouseReleased(button, mods); });
 
         m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/scene1.obj");
+
+        characterMesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/cylinder.obj");
 
         try
         {
@@ -212,7 +229,7 @@ public:
         };
         // END LIGHT UBO ************************************************************************************************
         // RENDER FUNCTIONS *********************************************************************************************
-        auto renderMinimapTexture = [&]
+        auto renderMinimapTexture = [&](Shader &shader)
         {
             glEnable(GL_DEPTH_TEST);
             glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -226,32 +243,33 @@ public:
 
             const glm::mat4 m_projection2 = glm::ortho(-orthoWidth, orthoWidth, -minimap_ortho_height, minimap_ortho_height, 0.1f, 100.0f);
 
-            const glm::mat4 mvpMatrix = m_projection2 * pMinimapCamera->viewMatrix() * m_modelMatrix;
-            // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
-            // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
-            const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(m_modelMatrix));
-
-            for (GPUMesh &mesh : m_meshes)
+             for (GPUMesh &mesh : m_meshes)
             {
-                m_minimapShader.bind();
-                glUniformMatrix4fv(m_minimapShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
+                const glm::mat4 mvpMatrix = m_projection2 * pMinimapCamera->viewMatrix() * mesh.modelMatrix;
+                // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
+                // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
+                const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(mesh.modelMatrix));
+                shader.bind();
+                //!! IMPORTANT -> mesh.draw binds material to block 0, we bind lightBuffer to 1 instead.
+                shader.bindUniformBlock("lightBuffer", 1, lightUBO);
+                glUniform3fv(shader.getUniformLocation("cameraPosition"), 1, glm::value_ptr(pFlyCamera->cameraPos()));
+                glUniformMatrix4fv(shader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
                 // Uncomment this line when you use the modelMatrix (or fragmentPosition)
                 // glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
-                glUniformMatrix3fv(m_minimapShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
-
+                glUniformMatrix3fv(shader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
                 if (mesh.hasTextureCoords())
                 {
                     m_texture.bind(GL_TEXTURE0);
-                    glUniform1i(m_minimapShader.getUniformLocation("colorMap"), 0);
-                    glUniform1i(m_minimapShader.getUniformLocation("hasTexCoords"), GL_TRUE);
-                    glUniform1i(m_minimapShader.getUniformLocation("useMaterial"), GL_FALSE);
+                    glUniform1i(shader.getUniformLocation("colorMap"), 0);
+                    glUniform1i(shader.getUniformLocation("hasTexCoords"), GL_TRUE);
+                    glUniform1i(shader.getUniformLocation("useMaterial"), GL_FALSE);
                 }
                 else
                 {
-                    glUniform1i(m_minimapShader.getUniformLocation("hasTexCoords"), GL_FALSE);
-                    glUniform1i(m_minimapShader.getUniformLocation("useMaterial"), m_useMaterial);
+                    glUniform1i(shader.getUniformLocation("hasTexCoords"), GL_FALSE);
+                    glUniform1i(shader.getUniformLocation("useMaterial"), m_useMaterial);
                 }
-                mesh.draw(m_minimapShader);
+                mesh.draw(shader);
             }
 
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -339,14 +357,12 @@ public:
 
         auto renderScene = [&](const Shader &shader)
         {
-
-            const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
-            // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
-            // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
-            const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(m_modelMatrix));
-
             for (GPUMesh &mesh : m_meshes)
             {
+                const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * mesh.modelMatrix;
+                // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
+                // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
+                const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(mesh.modelMatrix));
                 shader.bind();
                 //!! IMPORTANT -> mesh.draw binds material to block 0, we bind lightBuffer to 1 instead.
                 shader.bindUniformBlock("lightBuffer", 1, lightUBO);
@@ -370,104 +386,188 @@ public:
                 mesh.draw(shader);
             }
         };
+
+        auto renderMeshes = [&](const Shader &shader, std::vector<GPUMesh> &meshes, Texture &texture)
+        {
+            for (GPUMesh &mesh : meshes)
+            {
+                const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * mesh.modelMatrix;
+                // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
+                // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
+                const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(mesh.modelMatrix));
+                shader.bind();
+                //!! IMPORTANT -> mesh.draw binds material to block 0, we bind lightBuffer to 1 instead.
+                shader.bindUniformBlock("lightBuffer", 1, lightUBO);
+                glUniform3fv(shader.getUniformLocation("cameraPosition"), 1, glm::value_ptr(pFlyCamera->cameraPos()));
+                glUniformMatrix4fv(shader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
+                // Uncomment this line when you use the modelMatrix (or fragmentPosition)
+                // glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
+                glUniformMatrix3fv(shader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
+                if (mesh.hasTextureCoords())
+                {
+                    texture.bind(GL_TEXTURE0);
+                    glUniform1i(shader.getUniformLocation("colorMap"), 0);
+                    glUniform1i(shader.getUniformLocation("hasTexCoords"), GL_TRUE);
+                    glUniform1i(shader.getUniformLocation("useMaterial"), GL_FALSE);
+                }
+                else
+                {
+                    glUniform1i(shader.getUniformLocation("hasTexCoords"), GL_FALSE);
+                    glUniform1i(shader.getUniformLocation("useMaterial"), m_useMaterial);
+                }
+                mesh.draw(shader);
+            }
+        };
         // GAME LOOP ****************************************************************************************************
+
+        std::vector<GPUMesh> fireMesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/fireframes/firecube.obj");
+        std::vector<Texture> fireTextures;
+        fireTextures.push_back(Texture(RESOURCE_ROOT "resources/fireframes/frame1.png"));
+        fireTextures.push_back(Texture(RESOURCE_ROOT "resources/fireframes/frame2.png"));
+        fireTextures.push_back(Texture(RESOURCE_ROOT "resources/fireframes/frame3.png"));
+
+        Texture* activeFireTexture = &fireTextures[0];
+        int frameCounter = 0;
+
+        float previousTime = static_cast<float>(glfwGetTime());
         while (!m_window.shouldClose())
         {
             // This is your game loop
             // Put your real-time logic and rendering in here
 
+            float currentTime = static_cast<float>(glfwGetTime());
+            float frameTime = currentTime - previousTime;
+            previousTime = currentTime;
+            frameTimeAccumulator += frameTime;
+
+            while(frameTimeAccumulator >= fixedTimeStep) {
+
+                frameCounter++;
+                activeFireTexture = &fireTextures[((int) frameCounter/20) % fireTextures.size()];
+                frameTimeAccumulator -= fixedTimeStep;
+            }
+
             ImGuiIO& io = ImGui::GetIO();
 
             m_window.updateInput();
-            if (currentCameraMode == CameraMode::FlyCamera || currentCameraMode == CameraMode::MinimapCamera)
-                if(!io.WantCaptureMouse)
-                    pFlyCamera->updateInput();
+            switch (currentCameraMode) {
+                case CameraMode::FlyCamera:
+                case CameraMode::MinimapCamera:
+                case CameraMode::ThirdPersonCamera:
+                    if (!io.WantCaptureMouse) {
+                        pFlyCamera->updateInput();
+                    }
+                    break;
+                default:
+                    break;
+            }
 
-            // Use ImGui for easy input/output of ints, floats, strings, etc...
-            ImGui::Begin("Window");
-            ImGui::Checkbox("Use material if no texture", &m_useMaterial);
-            ImGui::Text("Camera Mode");
-            if (ImGui::BeginCombo("##combo", cameraModes[static_cast<int>(currentCameraMode)].c_str()))
-            {
-                for (unsigned int n = 0; n < cameraModes.size(); n++)
+            { // Use ImGui for easy input/output of ints, floats, strings, etc...
+                ImGui::Begin("Window");
+                ImGui::Checkbox("Use material if no texture", &m_useMaterial);
+                ImGui::Text("Camera Mode");
+                if (ImGui::BeginCombo("##combo", cameraModes[static_cast<int>(currentCameraMode)].c_str()))
                 {
-                    bool isSelected = (currentCameraMode == static_cast<CameraMode>(n));
-                    if (ImGui::Selectable(cameraModes[n].c_str(), isSelected))
+                    for (unsigned int n = 0; n < cameraModes.size(); n++)
                     {
-                        currentCameraMode = static_cast<CameraMode>(n);
+                        bool isSelected = (currentCameraMode == static_cast<CameraMode>(n));
+                        if (ImGui::Selectable(cameraModes[n].c_str(), isSelected))
+                        {
+                            currentCameraMode = static_cast<CameraMode>(n);
+                        }
+                        if (isSelected)
+                        {
+                            ImGui::SetItemDefaultFocus();
+                        }
                     }
-                    if (isSelected)
-                    {
-                        ImGui::SetItemDefaultFocus();
-                    }
+                    ImGui::EndCombo();
                 }
-                ImGui::EndCombo();
-            }
-            if (ImGui::Button("Reset FlyCamera"))
-            {
-                pFlyCamera->m_position = utils::START_POSITION;
-                pFlyCamera->m_forward = glm::normalize(utils::START_LOOK_AT - utils::START_POSITION);
-            }
-
-            if (ImGui::CollapsingHeader("FlyCamera Info"))
-            {
-                ImGui::Text("FlyCamera Position: (%.2f, %.2f, %.2f)", pFlyCamera->m_position.x, pFlyCamera->m_position.y, pFlyCamera->m_position.z);
-                ImGui::Text("FlyCamera Forward: (%.2f, %.2f, %.2f)", pFlyCamera->m_forward.x, pFlyCamera->m_forward.y, pFlyCamera->m_forward.z);
-                ImGui::Text("FlyCamera Up: (%.2f, %.2f, %.2f)", pFlyCamera->m_up.x, pFlyCamera->m_up.y, pFlyCamera->m_up.z);
-            }
-
-            ImGui::Separator();
-            if(ImGui::CollapsingHeader("Minimap")){
-                ImGui::DragFloat("Ortho Height", &minimap_ortho_height, 0.1f, 1.0f, 80.0f, "%.1f");
-                if (ImGui::CollapsingHeader("Minimap Position"))
+                if (ImGui::Button("Reset FlyCamera"))
                 {
-                    ImGui::DragFloat3("Quad First", glm::value_ptr(quad_first), 0.01f, -1.0f, 1.8f, "%.2f");
-                    ImGui::DragFloat3("Quad Second", glm::value_ptr(quad_sec), 0.01f, -1.0f, 1.8f, "%.2f");
-                    ImGui::DragFloat3("Quad Third", glm::value_ptr(quad_third), 0.01f, -1.0f, 1.8f, "%.2f");
-                    ImGui::DragFloat3("Quad Fourth", glm::value_ptr(quad_fourth), 0.01f, -1.0f, 1.8f, "%.2f");
-                }
-            }
-
-
-            if(ImGui::CollapsingHeader("Lights")){
-                // Display lights in scene
-                std::vector<std::string> itemStrings = {};
-                for (size_t i = 0; i < lights.size(); i++) {
-                    auto string = "Light " + std::to_string(i) + "|R " + std::to_string(lights[i].color.r).substr(0, 5) + " |G" + std::to_string(lights[i].color.g).substr(0, 5) + " |B " + std::to_string(lights[i].color.b).substr(0, 5);
-                    itemStrings.push_back(string);
+                    pFlyCamera->m_position = utils::START_POSITION;
+                    pFlyCamera->m_forward = glm::normalize(utils::START_LOOK_AT - utils::START_POSITION);
                 }
 
-                std::vector<const char*> itemCStrings = {};
-                for (const auto& string : itemStrings) {
-                    itemCStrings.push_back(string.c_str());
+                if (ImGui::CollapsingHeader("Third Person Camera"))
+                {
+                    ImGui::DragFloat("Follow Distance", &followDistance, 0.1f, 0.0f, 20.0f, "%.1f");
+                    ImGui::DragFloat("Height Offset", &heightOffset, 0.1f, 0.0f, 20.0f, "%.1f");
+                    ImGui::DragFloat("Side Offset", &sideOffset, 0.1f, -10.0f, 10.0f, "%.1f");
+                    ImGui::DragFloat3("Character Offset", glm::value_ptr(characterOffset), 0.1f, -10.0f, 10.0f, "%.1f");
                 }
 
-                int tempSelectedItem = static_cast<int>(selectedLightIndex);
-                if (ImGui::ListBox("Lights", &tempSelectedItem, itemCStrings.data(), (int)itemCStrings.size(), 4)) {
-                    selectedLightIndex = static_cast<size_t>(tempSelectedItem);
+                if (ImGui::CollapsingHeader("FlyCamera Info"))
+                {
+                    ImGui::Text("FlyCamera Position: (%.2f, %.2f, %.2f)", pFlyCamera->m_position.x, pFlyCamera->m_position.y, pFlyCamera->m_position.z);
+                    ImGui::Text("FlyCamera Forward: (%.2f, %.2f, %.2f)", pFlyCamera->m_forward.x, pFlyCamera->m_forward.y, pFlyCamera->m_forward.z);
+                    ImGui::Text("FlyCamera Up: (%.2f, %.2f, %.2f)", pFlyCamera->m_up.x, pFlyCamera->m_up.y, pFlyCamera->m_up.z);
                 }
 
-                if (ImGui::Button("Add Light")) {
-                    lights.push_back(Light{ glm::vec4(0, 0, 3, 0.f), glm::vec4(1) });
-                    selectedLightIndex = lights.size() - 1;
-                }
-
-                ImGui::SameLine();
-                if (ImGui::Button("Remove Light")) {
-                    if (lights.size() > 1) {
-                        lights.erase(lights.begin() + selectedLightIndex);
-                        selectedLightIndex = 0;
+                ImGui::Separator();
+                if (ImGui::CollapsingHeader("Minimap"))
+                {
+                    ImGui::DragFloat("Ortho Height", &minimap_ortho_height, 0.1f, 1.0f, 80.0f, "%.1f");
+                    if (ImGui::CollapsingHeader("Minimap Position"))
+                    {
+                        ImGui::DragFloat3("Quad First", glm::value_ptr(quad_first), 0.01f, -1.0f, 1.8f, "%.2f");
+                        ImGui::DragFloat3("Quad Second", glm::value_ptr(quad_sec), 0.01f, -1.0f, 1.8f, "%.2f");
+                        ImGui::DragFloat3("Quad Third", glm::value_ptr(quad_third), 0.01f, -1.0f, 1.8f, "%.2f");
+                        ImGui::DragFloat3("Quad Fourth", glm::value_ptr(quad_fourth), 0.01f, -1.0f, 1.8f, "%.2f");
                     }
                 }
 
-                //Slider for selected camera pos
-                ImGui::DragFloat4("Position", glm::value_ptr(lights[selectedLightIndex].position), 0.1f, -10.0f, 10.0f);
+                if (ImGui::CollapsingHeader("Lights"))
+                {
+                    // Display lights in scene
+                    std::vector<std::string> itemStrings = {};
+                    for (size_t i = 0; i < lights.size(); i++)
+                    {
+                        auto string = "Light " + std::to_string(i) + "|R " + std::to_string(lights[i].color.r).substr(0, 5) + " |G" + std::to_string(lights[i].color.g).substr(0, 5) + " |B " + std::to_string(lights[i].color.b).substr(0, 5);
+                        itemStrings.push_back(string);
+                    }
 
-                //Color picker for selected light
-                ImGui::ColorEdit4("Color", &lights[selectedLightIndex].color[0]);
-                refreshLightsUBO();
+                    std::vector<const char *> itemCStrings = {};
+                    for (const auto &string : itemStrings)
+                    {
+                        itemCStrings.push_back(string.c_str());
+                    }
+
+                    int tempSelectedItem = static_cast<int>(selectedLightIndex);
+                    if (ImGui::ListBox("Lights", &tempSelectedItem, itemCStrings.data(), (int)itemCStrings.size(), 4))
+                    {
+                        selectedLightIndex = static_cast<size_t>(tempSelectedItem);
+                    }
+
+                    if (ImGui::Button("Add Light"))
+                    {
+                        lights.push_back(Light{glm::vec4(0, 0, 3, 0.f), glm::vec4(1)});
+                        selectedLightIndex = lights.size() - 1;
+                    }
+
+                    ImGui::SameLine();
+                    if (ImGui::Button("Remove Light"))
+                    {
+                        if (lights.size() > 1)
+                        {
+                            lights.erase(lights.begin() + selectedLightIndex);
+                            selectedLightIndex = 0;
+                        }
+                    }
+
+                    ImGui::SameLine();
+                    if (ImGui::Button("Move Light to Camera")) {
+                        lights[selectedLightIndex].position = glm::vec4(pFlyCamera->m_position, 1.0f);
+                    }
+
+                    // Slider for selected camera pos
+                    ImGui::DragFloat4("Position", glm::value_ptr(lights[selectedLightIndex].position), 0.1f, -10.0f, 10.0f);
+
+                    // Color picker for selected light
+                    ImGui::ColorEdit4("Color", &lights[selectedLightIndex].color[0]);
+                    refreshLightsUBO();
+                }
+                ImGui::End();
             }
-            ImGui::End();
 
             // Clear the screen
             glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -491,6 +591,12 @@ public:
                 // TODO: This should be changed to an actual function in camera.cpp
                 m_projectionMatrix = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 100.0f);
                 break;
+            case CameraMode::ThirdPersonCamera:
+                pTrackball->disableTranslation();
+                m_viewMatrix = pTppCamera->viewMatrix();
+                // TODO: This should be changed to an actual function in camera.cpp
+                m_projectionMatrix = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 100.0f);
+                break;
             case CameraMode::MinimapCamera:
 
                 m_viewMatrix = pMinimapCamera->viewMatrix();
@@ -500,21 +606,50 @@ public:
                 const glm::mat4 m_projection2 = glm::ortho(-orthoWidth, orthoWidth, -minimap_ortho_height, minimap_ortho_height, 0.1f, 100.0f);
                 m_projectionMatrix = m_projection2;
             }
-            // m_viewMatrix = pTrackball->viewMatrix();
-            // m_projectionMatrix = pTrackball->projectionMatrix();
 
-            pMinimapCamera->m_position = pFlyCamera->m_position;
-            pMinimapCamera->m_forward = glm::vec3(0.f, -1.f, 0.f);
-            glm::vec3 interim = pFlyCamera->m_forward;
-            pMinimapCamera->m_up = glm::vec3(interim.x, 0.f, interim.z);
+            { // MINIMAP
+                pMinimapCamera->m_position = pFlyCamera->m_position;
+                pMinimapCamera->m_forward = glm::vec3(0.f, -1.f, 0.f);
+                pMinimapCamera->m_up = glm::vec3(pFlyCamera->m_forward.x, 0.f, pFlyCamera->m_forward.z);
+            }
 
-            renderMinimapTexture();
+            if(currentCameraMode == CameraMode::ThirdPersonCamera){
+                // Calculate a rightward direction from the character's forward vector
+                glm::vec3 rightOffset = glm::normalize(glm::cross(pFlyCamera->m_forward, glm::vec3(0.0f, 1.0f, 0.0f))) * sideOffset;
+
+                // Set pTppCamera position relative to the character with an additional side offset
+                pTppCamera->m_position = pFlyCamera->m_position 
+                                        - followDistance * pFlyCamera->m_forward 
+                                        + glm::vec3(0.0f, heightOffset, 0.0f)
+                                        + rightOffset;
+
+                // Set the forward direction of the camera to look at the character's position
+                pTppCamera->m_forward = pFlyCamera->m_forward;
+
+                // Calculate a right vector based on the camera's forward direction and world up vector
+                glm::vec3 rightVector = glm::normalize(glm::cross(pTppCamera->m_forward, glm::vec3(0.0f, 1.0f, 0.0f)));
+
+                // Recalculate up vector as perpendicular to forward and right, ensuring it’s stable even when looking up/down
+                pTppCamera->m_up = glm::cross(rightVector, pTppCamera->m_forward);
+
+                
+                renderMeshes(m_defaultShader, characterMesh, characterTexture);
+
+            }
+
+            for(GPUMesh &mesh : characterMesh) {
+                mesh.attachToCamera(pFlyCamera->m_position, pFlyCamera->m_forward, pFlyCamera->m_up, characterOffset);
+            }
+
+            if(show_map) renderMinimapTexture(m_defaultShader);
 
             renderScene(m_defaultShader);
 
+            renderMeshes(m_defaultShader, fireMesh, *activeFireTexture);
+
             // render quad
 
-            renderMinimap();
+            if(show_map) renderMinimap();
             // Processes input and swaps the window buffer
             m_window.swapBuffers();
         }
@@ -525,6 +660,16 @@ public:
     // mods - Any modifier keys pressed, like shift or control
     void onKeyPressed(int key, int mods)
     {
+
+        if(key == GLFW_KEY_M) show_map = !show_map;;
+
+        if(key == GLFW_KEY_V) {
+            if (currentCameraMode == CameraMode::FlyCamera) {
+                currentCameraMode = CameraMode::ThirdPersonCamera;
+            } else if (currentCameraMode == CameraMode::ThirdPersonCamera) {
+                currentCameraMode = CameraMode::FlyCamera;
+            }
+        }
         std::cout << "Key pressed: " << key << std::endl;
     }
 
@@ -568,7 +713,9 @@ private:
     Shader m_minimapShader;
 
     std::vector<GPUMesh> m_meshes;
+    std::vector<GPUMesh> characterMesh;
     Texture m_texture;
+    Texture characterTexture;
     bool m_useMaterial{true};
 
     // Projection and view matrices for you to fill in and use

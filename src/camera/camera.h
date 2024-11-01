@@ -30,6 +30,7 @@ public:
     glm::vec3 m_position { 0 };
     glm::vec3 m_forward { 0, 0, -1 };
     glm::vec3 m_up { 0, 1, 0 };
+    glm::vec3 m_velocity{0, 0, 0};
 
     const Window* m_pWindow;
     bool m_userInteraction { true };
