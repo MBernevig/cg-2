@@ -14,6 +14,8 @@ add_executable(Master_TechDemo
     "src/texture.cpp"
 	"src/mesh.cpp"
 	"src/camera/camera.cpp"
+		src/lights/Lights.h
+		src/lights/lights.cpp
 )
 
 target_include_directories(Master_TechDemo PRIVATE "src/camera")

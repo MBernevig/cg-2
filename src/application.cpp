@@ -4,6 +4,8 @@
 // Always include window first (because it includes glfw, which includes GL which needs to be included AFTER glew).
 // Can't wait for modules to fix this stuff...
 #include <framework/disable_all_warnings.h>
+
+#include "lights/lights.h"
 DISABLE_WARNINGS_PUSH()
 #include <glad/glad.h>
 // Include glad before glfw3
@@ -66,17 +68,17 @@ struct Light {
     glm::vec4 color;
 };
 
-std::vector<Light> lights = {{glm::vec4(3.f, 8.f, -10.f, -0.f), glm::vec4(1.f, 1.f, 1.f, 0.f)}};
-
-int selectedLightIndex = 0;
 
 
 class Application
 {
 public:
     Application()
-        : m_window("Final Project", glm::ivec2(utils::WIDTH, utils::HEIGHT), OpenGLVersion::GL41), m_texture(RESOURCE_ROOT "resources/pattern.png")
-    {
+    : m_window("Final Project", glm::ivec2(utils::WIDTH, utils::HEIGHT), OpenGLVersion::GL41),
+    m_texture(RESOURCE_ROOT "resources/pattern.png"),
+    m_lightManager({
+        lum::Light(&m_window, glm::vec4(6.f, 3.f, -10.f, -0.f), glm::vec4(1.f, 1.f, 1.f, 0.f))
+    }) {
         pTrackball = std::make_unique<Trackball>(&m_window, glm::radians(50.0f));
         pFlyCamera = std::make_unique<Camera>(&m_window, utils::START_POSITION, utils::START_LOOK_AT);
         pMinimapCamera = std::make_unique<Camera>(&m_window, utils::START_POSITION, utils::START_LOOK_AT);
@@ -188,49 +190,8 @@ public:
         // END MINIMAP INITs ********************************************************************************************
 
         // LIGHT UBO ****************************************************************************************************
-        int number_of_lights = (int) lights.size();
-
-        GLuint lightUBO;
-        glGenBuffers(1, &lightUBO);
-        glBindBuffer(GL_UNIFORM_BUFFER, lightUBO);
-        //Set buffer size
-        glBufferData(GL_UNIFORM_BUFFER, number_of_lights * sizeof(Light) + 16, NULL, GL_DYNAMIC_DRAW);
-        //Number of lights goes into first 4 bytes
-        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(int), &number_of_lights);
-        //Now the light data
-        glBufferSubData(GL_UNIFORM_BUFFER, 16, number_of_lights * sizeof(Light), lights.data());
-        //Unbind buffer
-        glBindBuffer(GL_UNIFORM_BUFFER, 0);
-
-        
-        GLuint lightVAO, lightVBO;
-        glGenVertexArrays(1, &lightVAO);
-        glGenVertexArrays(1, &lightVBO);
-        
-        glBindVertexArray(lightVAO);
-        glBindBuffer(GL_ARRAY_BUFFER, lightVBO);
-
-        glBufferData(GL_ARRAY_BUFFER, lights.size() * sizeof(glm::vec4), lights.data(), GL_DYNAMIC_DRAW);
-        
-        glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(Light), (void*) offsetof(Light, position));
-        glEnableVertexAttribArray(0);
-        
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glBindVertexArray(0);
-
-        // For updating lights
-        auto refreshLightsUBO = [&] {
-            int number_of_lights = (int) lights.size();
-             glBindBuffer(GL_UNIFORM_BUFFER, lightUBO);
-            //Set buffer size
-            glBufferData(GL_UNIFORM_BUFFER, number_of_lights * sizeof(Light) + 16, NULL, GL_DYNAMIC_DRAW);
-            //Number of lights goes into first 4 bytes
-            glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(int), &number_of_lights);
-            //Now the light data
-            glBufferSubData(GL_UNIFORM_BUFFER, 16, number_of_lights * sizeof(Light), lights.data());
-            //Unbind buffer
-            glBindBuffer(GL_UNIFORM_BUFFER, 0);
-        };
+        m_lightManager.generateVAOs();
+        m_lightManager.refreshUBOs();
         // END LIGHT UBO ************************************************************************************************
         // RENDER FUNCTIONS *********************************************************************************************
         auto renderMinimapTexture = [&]
@@ -370,7 +331,7 @@ public:
             {
                 shader.bind();
                 //!! IMPORTANT -> mesh.draw binds material to block 0, we bind lightBuffer to 1 instead.
-                shader.bindUniformBlock("lightBuffer", 1, lightUBO);
+                shader.bindUniformBlock("lightBuffer", 1, m_lightManager.m_UBO);
                 glUniform3fv(shader.getUniformLocation("cameraPosition"), 1, glm::value_ptr(pFlyCamera->cameraPos()));
                 glUniformMatrix4fv(shader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
                 // Uncomment this line when you use the modelMatrix (or fragmentPosition)
@@ -453,8 +414,8 @@ public:
             if(ImGui::CollapsingHeader("Lights")){
                 // Display lights in scene
                 std::vector<std::string> itemStrings = {};
-                for (size_t i = 0; i < lights.size(); i++) {
-                    auto string = "Light " + std::to_string(i) + "|R " + std::to_string(lights[i].color.r).substr(0, 5) + " |G" + std::to_string(lights[i].color.g).substr(0, 5) + " |B " + std::to_string(lights[i].color.b).substr(0, 5);
+                for (size_t i = 0; i < m_lightManager.m_lights.size(); i++) {
+                    auto string = "Light " + std::to_string(i) + m_lightManager.m_lights[i].toString();
                     itemStrings.push_back(string);
                 }
 
@@ -463,30 +424,30 @@ public:
                     itemCStrings.push_back(string.c_str());
                 }
 
-                int tempSelectedItem = static_cast<int>(selectedLightIndex);
+                int tempSelectedItem = static_cast<int>(m_lightManager.m_selectedLightIndex);
                 if (ImGui::ListBox("Lights", &tempSelectedItem, itemCStrings.data(), (int)itemCStrings.size(), 4)) {
-                    selectedLightIndex = static_cast<size_t>(tempSelectedItem);
+                    m_lightManager.m_selectedLightIndex = static_cast<size_t>(tempSelectedItem);
                 }
 
                 if (ImGui::Button("Add Light")) {
-                    lights.push_back(Light{ glm::vec4(0, 0, 3, 0.f), glm::vec4(1) });
-                    selectedLightIndex = lights.size() - 1;
+                    m_lightManager.m_lights.push_back(lum::Light{ &m_window, glm::vec4(0, 0, 3, 0.f), glm::vec4(1) });
+                    m_lightManager.m_selectedLightIndex = m_lightManager.m_lights.size() - 1;
                 }
 
                 ImGui::SameLine();
                 if (ImGui::Button("Remove Light")) {
-                    if (lights.size() > 1) {
-                        lights.erase(lights.begin() + selectedLightIndex);
-                        selectedLightIndex = 0;
+                    if (m_lightManager.m_lights.size() > 1) {
+                        m_lightManager.m_lights.erase(m_lightManager.m_lights.begin() + m_lightManager.m_selectedLightIndex);
+                        m_lightManager.m_selectedLightIndex = 0;
                     }
                 }
 
                 //Slider for selected camera pos
-                ImGui::DragFloat4("Position", glm::value_ptr(lights[selectedLightIndex].position), 0.1f, -10.0f, 10.0f);
+                ImGui::DragFloat4("Position", glm::value_ptr(m_lightManager.crtLight().m_camera.m_position), 0.1f, -10.0f, 10.0f);
 
                 //Color picker for selected light
-                ImGui::ColorEdit4("Color", &lights[selectedLightIndex].color[0]);
-                refreshLightsUBO();
+                ImGui::ColorEdit4("Color", &m_lightManager.crtLight().m_color[0]);
+                m_lightManager.refreshUBOs();
             }
             ImGui::End();
 
@@ -540,54 +501,21 @@ public:
 
             // draw debug lights
             {
-                glBindBuffer(GL_ARRAY_BUFFER, lightVBO);
-                glBufferData(GL_ARRAY_BUFFER, lights.size() * sizeof(glm::vec4), lights.data(), GL_DYNAMIC_DRAW);
-
+                m_lightManager.refreshVBOs();
                 m_lightShader.bind();
 
                 const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
                 glEnable(GL_PROGRAM_POINT_SIZE);
                 glUniformMatrix4fv(m_lightShader.getUniformLocation("mvp"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
 
-                glBindVertexArray(lightVAO);
-                glDrawArrays(GL_POINTS, 0, lights.size());
-                glBindBuffer(GL_ARRAY_BUFFER, 0);
-                glBindVertexArray(0);
+                glBindVertexArray(m_lightManager.m_VAO);
+                glDrawArrays(GL_POINTS, 0, m_lightManager.m_lights.size());
             }
             // draw_lights(m_lightShader, lightVAO, m_projectionMatrix * m_viewMatrix * m_modelMatrix);
             
             m_window.swapBuffers();
         }
     }
-
-void draw_lights(const Shader& lightShader, GLuint lightVAO, const glm::mat4& mvp) {
-    // Draw lights as (square) points.
-    //glDepthMask(GL_FALSE);
-    lightShader.bind();
-    // {
-    //     const glm::vec4 screenPos = mvp * glm::vec4(lights[selectedLightIndex].position);
-    //     constexpr glm::vec3 color { 1, 1, 0 };
-    //
-    //     glPointSize(40.0f);
-    //     glUniform4fv(lightShader.getUniformLocation("pos"), 1, glm::value_ptr(screenPos));
-    //     glUniform3fv(lightShader.getUniformLocation("color"), 1, glm::value_ptr(color));
-    //     // glBindVertexArray(vao);
-    //     glDrawArrays(GL_POINTS, 0, 1);
-    //     // glBindVertexArray(0);
-    // }
-        // glBindBuffer(GL_ARRAY_BUFFER)
-    for (const Light& light : lights) {
-        const glm::vec4 screenPos = mvp * light.position;
-        // const glm::vec3 color { 1, 0, 0 };
-
-        glPointSize(10.0f);
-        glUniform4fv(lightShader.getUniformLocation("pos"), 1, glm::value_ptr(screenPos));
-        glUniform3fv(lightShader.getUniformLocation("color"), 1, glm::value_ptr(light.color));
-        // glBindVertexArray(vao);
-        glDrawArrays(GL_POINTS, 0, 1);
-        // glBindVertexArray(0);
-    }
-}
     
     // In here you can handle key presses
     // key - Integer that corresponds to numbers in https://www.glfw.org/docs/latest/group__keys.html
@@ -640,6 +568,8 @@ private:
     std::vector<GPUMesh> m_meshes;
     Texture m_texture;
     bool m_useMaterial{true};
+
+    lum::LightManager m_lightManager;
 
     // Projection and view matrices for you to fill in and use
     glm::mat4 m_projectionMatrix = glm::perspective(glm::radians(80.0f), 1.0f, 0.1f, 30.0f);
