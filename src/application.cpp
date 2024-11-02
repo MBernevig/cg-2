@@ -30,12 +30,13 @@ std::unique_ptr<Trackball> pTrackball;
 std::unique_ptr<Camera> pFlyCamera;
 std::unique_ptr<Camera> pMinimapCamera;
 
-std::vector<std::string> cameraModes = {"Trackball", "FlyCamera", "MinimapCamera"};
+std::vector<std::string> cameraModes = {"Trackball", "FlyCamera", "MinimapCamera", "LightCamera"};
 enum class CameraMode
 {
     Trackball,
     FlyCamera,
-    MinimapCamera
+    MinimapCamera,
+    LightCamera
 };
 
 std::vector<GPUMesh> crosshair_mesh;
@@ -97,7 +98,7 @@ public:
             else if (action == GLFW_RELEASE)
                 onMouseReleased(button, mods); });
 
-        m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/scene1.obj");
+        m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/platform_dragon.obj");
 
         try
         {
@@ -190,8 +191,6 @@ public:
         // END MINIMAP INITs ********************************************************************************************
 
         // LIGHT UBO ****************************************************************************************************
-        m_lightManager.generateVAOs();
-        m_lightManager.refreshUBOs();
         // END LIGHT UBO ************************************************************************************************
         // RENDER FUNCTIONS *********************************************************************************************
         auto renderMinimapTexture = [&]
@@ -355,6 +354,7 @@ public:
         // GAME LOOP ****************************************************************************************************
         while (!m_window.shouldClose())
         {
+            m_lightManager.refreshUBOs();
             // This is your game loop
             // Put your real-time logic and rendering in here
 
@@ -364,92 +364,11 @@ public:
             if (currentCameraMode == CameraMode::FlyCamera || currentCameraMode == CameraMode::MinimapCamera)
                 if(!io.WantCaptureMouse)
                     pFlyCamera->updateInput();
+            if (currentCameraMode == CameraMode::LightCamera)
+                if(!io.WantCaptureMouse)
+                    m_lightManager.crtLight().m_camera.updateInput();
 
-            // Use ImGui for easy input/output of ints, floats, strings, etc...
-            ImGui::Begin("Window");
-            ImGui::Checkbox("Use material if no texture", &m_useMaterial);
-            ImGui::Text("Camera Mode");
-            if (ImGui::BeginCombo("##combo", cameraModes[static_cast<int>(currentCameraMode)].c_str()))
-            {
-                for (unsigned int n = 0; n < cameraModes.size(); n++)
-                {
-                    bool isSelected = (currentCameraMode == static_cast<CameraMode>(n));
-                    if (ImGui::Selectable(cameraModes[n].c_str(), isSelected))
-                    {
-                        currentCameraMode = static_cast<CameraMode>(n);
-                    }
-                    if (isSelected)
-                    {
-                        ImGui::SetItemDefaultFocus();
-                    }
-                }
-                ImGui::EndCombo();
-            }
-            if (ImGui::Button("Reset FlyCamera"))
-            {
-                pFlyCamera->m_position = utils::START_POSITION;
-                pFlyCamera->m_forward = glm::normalize(utils::START_LOOK_AT - utils::START_POSITION);
-            }
-
-            if (ImGui::CollapsingHeader("FlyCamera Info"))
-            {
-                ImGui::Text("FlyCamera Position: (%.2f, %.2f, %.2f)", pFlyCamera->m_position.x, pFlyCamera->m_position.y, pFlyCamera->m_position.z);
-                ImGui::Text("FlyCamera Forward: (%.2f, %.2f, %.2f)", pFlyCamera->m_forward.x, pFlyCamera->m_forward.y, pFlyCamera->m_forward.z);
-                ImGui::Text("FlyCamera Up: (%.2f, %.2f, %.2f)", pFlyCamera->m_up.x, pFlyCamera->m_up.y, pFlyCamera->m_up.z);
-            }
-
-            ImGui::Separator();
-            if(ImGui::CollapsingHeader("Minimap")){
-                ImGui::DragFloat("Ortho Height", &minimap_ortho_height, 0.1f, 1.0f, 80.0f, "%.1f");
-                if (ImGui::CollapsingHeader("Minimap Position"))
-                {
-                    ImGui::DragFloat3("Quad First", glm::value_ptr(quad_first), 0.01f, -1.0f, 1.8f, "%.2f");
-                    ImGui::DragFloat3("Quad Second", glm::value_ptr(quad_sec), 0.01f, -1.0f, 1.8f, "%.2f");
-                    ImGui::DragFloat3("Quad Third", glm::value_ptr(quad_third), 0.01f, -1.0f, 1.8f, "%.2f");
-                    ImGui::DragFloat3("Quad Fourth", glm::value_ptr(quad_fourth), 0.01f, -1.0f, 1.8f, "%.2f");
-                }
-            }
-
-
-            if(ImGui::CollapsingHeader("Lights")){
-                // Display lights in scene
-                std::vector<std::string> itemStrings = {};
-                for (size_t i = 0; i < m_lightManager.m_lights.size(); i++) {
-                    auto string = "Light " + std::to_string(i) + m_lightManager.m_lights[i].toString();
-                    itemStrings.push_back(string);
-                }
-
-                std::vector<const char*> itemCStrings = {};
-                for (const auto& string : itemStrings) {
-                    itemCStrings.push_back(string.c_str());
-                }
-
-                int tempSelectedItem = static_cast<int>(m_lightManager.m_selectedLightIndex);
-                if (ImGui::ListBox("Lights", &tempSelectedItem, itemCStrings.data(), (int)itemCStrings.size(), 4)) {
-                    m_lightManager.m_selectedLightIndex = static_cast<size_t>(tempSelectedItem);
-                }
-
-                if (ImGui::Button("Add Light")) {
-                    m_lightManager.m_lights.push_back(lum::Light{ &m_window, glm::vec4(0, 0, 3, 0.f), glm::vec4(1) });
-                    m_lightManager.m_selectedLightIndex = m_lightManager.m_lights.size() - 1;
-                }
-
-                ImGui::SameLine();
-                if (ImGui::Button("Remove Light")) {
-                    if (m_lightManager.m_lights.size() > 1) {
-                        m_lightManager.m_lights.erase(m_lightManager.m_lights.begin() + m_lightManager.m_selectedLightIndex);
-                        m_lightManager.m_selectedLightIndex = 0;
-                    }
-                }
-
-                //Slider for selected camera pos
-                ImGui::DragFloat4("Position", glm::value_ptr(m_lightManager.crtLight().m_camera.m_position), 0.1f, -10.0f, 10.0f);
-
-                //Color picker for selected light
-                ImGui::ColorEdit4("Color", &m_lightManager.crtLight().m_color[0]);
-                m_lightManager.refreshUBOs();
-            }
-            ImGui::End();
+            renderGui();
 
             // Clear the screen
             glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -460,27 +379,38 @@ public:
             glEnable(GL_BLEND);
 
             // TODO: We should change this to be actual character controls, but I hate the idea of it.
-            switch (currentCameraMode)
-            {
-            case CameraMode::Trackball:
-                pTrackball->enableTranslation();
-                m_viewMatrix = pTrackball->viewMatrix();
-                m_projectionMatrix = pTrackball->projectionMatrix();
-                break;
-            case CameraMode::FlyCamera:
-                pTrackball->disableTranslation();
-                m_viewMatrix = pFlyCamera->viewMatrix();
-                // TODO: This should be changed to an actual function in camera.cpp
-                m_projectionMatrix = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 100.0f);
-                break;
-            case CameraMode::MinimapCamera:
+            switch (currentCameraMode) {
+                case CameraMode::Trackball: { 
+                    pTrackball->enableTranslation();
+                    m_viewMatrix = pTrackball->viewMatrix();
+                    m_projectionMatrix = pTrackball->projectionMatrix();
+                    break;
+                }
+                
+                case CameraMode::FlyCamera: {
+                    pTrackball->disableTranslation();
+                    m_viewMatrix = pFlyCamera->viewMatrix();
+                    // TODO: This should be changed to an actual function in camera.cpp
+                    m_projectionMatrix = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 100.0f);
+                    break;
+                }
+                    
+                case CameraMode::MinimapCamera: {
+                    m_viewMatrix = pMinimapCamera->viewMatrix();
+                    // TODO: This should be changed to an actual function in camera.cpp
+                    float orthoWidth = minimap_ortho_height * utils::ASPECT_RATIO;
 
-                m_viewMatrix = pMinimapCamera->viewMatrix();
-                // TODO: This should be changed to an actual function in camera.cpp
-                float orthoWidth = minimap_ortho_height * utils::ASPECT_RATIO;
+                    const glm::mat4 m_projection2 = glm::ortho(-orthoWidth, orthoWidth, -minimap_ortho_height, minimap_ortho_height, 0.1f, 100.0f);
+                    m_projectionMatrix = m_projection2;
+                    break;
+                }
 
-                const glm::mat4 m_projection2 = glm::ortho(-orthoWidth, orthoWidth, -minimap_ortho_height, minimap_ortho_height, 0.1f, 100.0f);
-                m_projectionMatrix = m_projection2;
+                case CameraMode::LightCamera: {
+                    pTrackball->disableTranslation();
+                    m_viewMatrix = m_lightManager.crtLight().m_camera.viewMatrix();
+                    m_projectionMatrix = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 100.0f);
+                    break;
+                }
             }
             // m_viewMatrix = pTrackball->viewMatrix();
             // m_projectionMatrix = pTrackball->projectionMatrix();
@@ -497,24 +427,113 @@ public:
             // render quad
 
             renderMinimap();
+            m_lightManager.drawLights(m_lightShader, m_projectionMatrix * m_viewMatrix * m_modelMatrix);
             // Processes input and swaps the window buffer
 
             // draw debug lights
-            {
-                m_lightManager.refreshVBOs();
-                m_lightShader.bind();
-
-                const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
-                glEnable(GL_PROGRAM_POINT_SIZE);
-                glUniformMatrix4fv(m_lightShader.getUniformLocation("mvp"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
-
-                glBindVertexArray(m_lightManager.m_VAO);
-                glDrawArrays(GL_POINTS, 0, m_lightManager.m_lights.size());
-            }
+            // {
+            //     m_lightManager.refreshVBOs();
+            //     m_lightShader.bind();
+            //
+            //     const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
+            //     glEnable(GL_PROGRAM_POINT_SIZE);
+            //     glUniformMatrix4fv(m_lightShader.getUniformLocation("mvp"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
+            //
+            //     glBindVertexArray(m_lightManager.m_VAO);
+            //     glDrawArrays(GL_POINTS, 0, m_lightManager.m_lights.size());
+            //     glBindVertexArray(0);
+            // }
             // draw_lights(m_lightShader, lightVAO, m_projectionMatrix * m_viewMatrix * m_modelMatrix);
             
             m_window.swapBuffers();
         }
+    }
+
+    void renderGui() {
+        // Use ImGui for easy input/output of ints, floats, strings, etc...
+        ImGui::Begin("Window");
+        ImGui::Checkbox("Use material if no texture", &m_useMaterial);
+        ImGui::Text("Camera Mode");
+        if (ImGui::BeginCombo("##combo", cameraModes[static_cast<int>(currentCameraMode)].c_str()))
+        {
+            for (unsigned int n = 0; n < cameraModes.size(); n++)
+            {
+                bool isSelected = (currentCameraMode == static_cast<CameraMode>(n));
+                if (ImGui::Selectable(cameraModes[n].c_str(), isSelected))
+                {
+                    currentCameraMode = static_cast<CameraMode>(n);
+                }
+                if (isSelected)
+                {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        if (ImGui::Button("Reset FlyCamera"))
+        {
+            pFlyCamera->m_position = utils::START_POSITION;
+            pFlyCamera->m_forward = normalize(utils::START_LOOK_AT - utils::START_POSITION);
+        }
+
+        if (ImGui::CollapsingHeader("FlyCamera Info"))
+        {
+            ImGui::Text("FlyCamera Position: (%.2f, %.2f, %.2f)", pFlyCamera->m_position.x, pFlyCamera->m_position.y, pFlyCamera->m_position.z);
+            ImGui::Text("FlyCamera Forward: (%.2f, %.2f, %.2f)", pFlyCamera->m_forward.x, pFlyCamera->m_forward.y, pFlyCamera->m_forward.z);
+            ImGui::Text("FlyCamera Up: (%.2f, %.2f, %.2f)", pFlyCamera->m_up.x, pFlyCamera->m_up.y, pFlyCamera->m_up.z);
+        }
+
+        ImGui::Separator();
+        if(ImGui::CollapsingHeader("Minimap")){
+            ImGui::DragFloat("Ortho Height", &minimap_ortho_height, 0.1f, 1.0f, 80.0f, "%.1f");
+            if (ImGui::CollapsingHeader("Minimap Position"))
+            {
+                ImGui::DragFloat3("Quad First", glm::value_ptr(quad_first), 0.01f, -1.0f, 1.8f, "%.2f");
+                ImGui::DragFloat3("Quad Second", glm::value_ptr(quad_sec), 0.01f, -1.0f, 1.8f, "%.2f");
+                ImGui::DragFloat3("Quad Third", glm::value_ptr(quad_third), 0.01f, -1.0f, 1.8f, "%.2f");
+                ImGui::DragFloat3("Quad Fourth", glm::value_ptr(quad_fourth), 0.01f, -1.0f, 1.8f, "%.2f");
+            }
+        }
+
+
+        if(ImGui::CollapsingHeader("Lights")){
+            // Display lights in scene
+            std::vector<std::string> itemStrings = {};
+            for (size_t i = 0; i < m_lightManager.m_lights.size(); i++) {
+                auto string = "Light " + std::to_string(i) + m_lightManager.m_lights[i].toString();
+                itemStrings.push_back(string);
+            }
+
+            std::vector<const char*> itemCStrings = {};
+            for (const auto& string : itemStrings) {
+                itemCStrings.push_back(string.c_str());
+            }
+
+            int tempSelectedItem = static_cast<int>(m_lightManager.m_selectedLightIndex);
+            if (ImGui::ListBox("Lights", &tempSelectedItem, itemCStrings.data(), (int)itemCStrings.size(), 4)) {
+                m_lightManager.m_selectedLightIndex = static_cast<size_t>(tempSelectedItem);
+            }
+
+            if (ImGui::Button("Add Light")) {
+                m_lightManager.m_lights.emplace_back( &m_window, glm::vec4(0, 0, 3, 0.f), glm::vec4(1) );
+                m_lightManager.m_selectedLightIndex = m_lightManager.m_lights.size() - 1;
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Remove Light")) {
+                if (m_lightManager.m_lights.size() > 1) {
+                    m_lightManager.m_lights.erase(m_lightManager.m_lights.begin() + m_lightManager.m_selectedLightIndex);
+                    m_lightManager.m_selectedLightIndex = 0;
+                }
+            }
+
+            //Slider for selected camera pos
+            ImGui::DragFloat4("Position", glm::value_ptr(m_lightManager.crtLight().m_camera.m_position), 0.1f, -10.0f, 10.0f);
+
+            //Color picker for selected light
+            ImGui::ColorEdit4("Color", &m_lightManager.crtLight().m_color[0]);
+        }
+        ImGui::End();
     }
     
     // In here you can handle key presses

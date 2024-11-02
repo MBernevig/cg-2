@@ -2,6 +2,7 @@
 #define LIGHTS_H
 #include <camera.h>
 #include <vector>
+#include <framework/shader.h>
 #include <glm/vec4.hpp>
 
 
@@ -30,6 +31,7 @@ namespace lum {
         explicit LightManager(std::vector<Light> lights);
 
         Light& crtLight();
+        void drawLights(const Shader &lightShader, const glm::mat4& mvp);
         // void addLight(Window* window, glm::vec3 position, glm::vec4 color);
         // void removeCrtLight();
         

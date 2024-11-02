@@ -1,8 +1,11 @@
 #include "lights.h"
 
+#include <camera.h>
+#include <camera.h>
 #include <constants.h>
 
 #include <utility>
+#include <glm/gtc/type_ptr.hpp>
 
 using namespace lum;
 
@@ -21,17 +24,45 @@ std::string Light::toString() const {
 LightManager::LightManager(std::vector<Light> lights)
     : m_lights(std::move(lights)) {
     // Generate BOs
-    glGenVertexArrays(1, &m_VBO);
+    glGenBuffers(1, &m_VBO);
     glGenVertexArrays(1, &m_VAO);
+    glGenBuffers(1, &m_UBO);
+    
+    glBindVertexArray(m_VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
+
+    std::vector<glm::vec4> vertices;
+    for (const auto& light : m_lights) {
+        vertices.emplace_back(light.m_camera.m_position, 1.0);
+    }
+
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec4), vertices.data(), GL_DYNAMIC_DRAW);
+    
+    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(glm::vec4), static_cast<void *>(0));
+    glEnableVertexAttribArray(0);
+    
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
 }
 
 Light &LightManager::crtLight() {
     return m_lights[m_selectedLightIndex];
 }
 
+void LightManager::drawLights(const Shader& lightShader, const glm::mat4& mvp) {
+    lightShader.bind();
+    refreshVBOs();
+    
+    glEnable(GL_PROGRAM_POINT_SIZE);
+    glUniformMatrix4fv(lightShader.getUniformLocation("mvp"), 1, GL_FALSE, glm::value_ptr(mvp));
+    
+    glBindVertexArray(m_VAO);
+    glDrawArrays(GL_POINTS, 0, m_lights.size());
+    glBindVertexArray(0);
+}
+
 void LightManager::refreshUBOs() {
     int number_of_lights = static_cast<int>(m_lights.size());
-    glGenBuffers(1, &m_UBO);
     glBindBuffer(GL_UNIFORM_BUFFER, m_UBO);
     //Set buffer size
     glBufferData(GL_UNIFORM_BUFFER, number_of_lights * sizeof(LightShadingData) + 16, NULL, GL_DYNAMIC_DRAW);
@@ -50,20 +81,15 @@ void LightManager::refreshUBOs() {
 }
 
 void LightManager::refreshVBOs() {
-    glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
-    glBufferData(GL_ARRAY_BUFFER, m_lights.size() * sizeof(glm::vec4), m_lights.data(), GL_DYNAMIC_DRAW);
-}
-
-
-void LightManager::generateVAOs() {
     glBindVertexArray(m_VAO);
-    
     glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
-    
-    glBufferData(GL_ARRAY_BUFFER, m_lights.size() * sizeof(glm::vec4), m_lights.data(), GL_DYNAMIC_DRAW);
-    
-    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(Light), (void *)(offsetof(Light, m_camera) + offsetof(Camera, m_position)));
-    glEnableVertexAttribArray(0);
+
+    std::vector<glm::vec4> vertices;
+    for (const auto& light : m_lights) {
+        vertices.emplace_back(light.m_camera.m_position, 1.0);
+    }
+
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec4), vertices.data(), GL_DYNAMIC_DRAW);
     
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
