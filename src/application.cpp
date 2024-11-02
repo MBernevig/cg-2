@@ -26,14 +26,12 @@ DISABLE_WARNINGS_POP()
 #include <camera.h>
 #include <constants.h>
 
-std::unique_ptr<Trackball> pTrackball;
 std::unique_ptr<Camera> pFlyCamera;
 std::unique_ptr<Camera> pMinimapCamera;
 
-std::vector<std::string> cameraModes = {"Trackball", "FlyCamera", "MinimapCamera", "LightCamera"};
+std::vector<std::string> cameraModes = {"FlyCamera", "MinimapCamera", "LightCamera"};
 enum class CameraMode
 {
-    Trackball,
     FlyCamera,
     MinimapCamera,
     LightCamera
@@ -80,7 +78,6 @@ public:
     m_lightManager({
         lum::Light(&m_window, glm::vec4(6.f, 3.f, -10.f, -0.f), glm::vec4(1.f, 1.f, 1.f, 0.f))
     }) {
-        pTrackball = std::make_unique<Trackball>(&m_window, glm::radians(50.0f));
         pFlyCamera = std::make_unique<Camera>(&m_window, utils::START_POSITION, utils::START_LOOK_AT);
         pMinimapCamera = std::make_unique<Camera>(&m_window, utils::START_POSITION, utils::START_LOOK_AT);
 
@@ -104,35 +101,23 @@ public:
         {
             ShaderBuilder defaultBuilder;
             defaultBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/shader_vert.glsl");
-            std::cout << "Linked shader_vert.glsl to defaultBuilder" << std::endl;
             defaultBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/shader_frag.glsl");
-            std::cout << "Linked shader_frag.glsl to defaultBuilder" << std::endl;
             m_defaultShader = defaultBuilder.build();
-            std::cout << "Built m_defaultShader" << std::endl;
 
             ShaderBuilder shadowBuilder;
             shadowBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/shadow_vert.glsl");
-            std::cout << "Linked shadow_vert.glsl to shadowBuilder" << std::endl;
             shadowBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "Shaders/shadow_frag.glsl");
-            std::cout << "Linked shadow_frag.glsl to shadowBuilder" << std::endl;
             m_shadowShader = shadowBuilder.build();
-            std::cout << "Built m_shadowShader" << std::endl;
 
             ShaderBuilder quadBuilder;
             quadBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/quad_vert.glsl");
-            std::cout << "Linked quad_vert.glsl to quadBuilder" << std::endl;
             quadBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/quad_frag.glsl");
-            std::cout << "Linked quad_frag.glsl to quadBuilder" << std::endl;
             m_quadShader = quadBuilder.build();
-            std::cout << "Built m_quadShader" << std::endl;
 
             ShaderBuilder minimapBuilder;
             minimapBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/minimap_vert.glsl");
-            std::cout << "Linked minimap_vert.glsl to minimapBuilder" << std::endl;
             minimapBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/minimap_frag.glsl");
-            std::cout << "Linked minimap_frag.glsl to minimapBuilder" << std::endl;
             m_minimapShader = minimapBuilder.build();
-            std::cout << "Built m_minimapShader" << std::endl;
 
             ShaderBuilder lightBuilder;
             lightBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/light_vertex.glsl");
@@ -190,8 +175,6 @@ public:
 
         // END MINIMAP INITs ********************************************************************************************
 
-        // LIGHT UBO ****************************************************************************************************
-        // END LIGHT UBO ************************************************************************************************
         // RENDER FUNCTIONS *********************************************************************************************
         auto renderMinimapTexture = [&]
         {
@@ -354,21 +337,17 @@ public:
         // GAME LOOP ****************************************************************************************************
         while (!m_window.shouldClose())
         {
-            m_lightManager.refreshUBOs();
             // This is your game loop
             // Put your real-time logic and rendering in here
-
-            ImGuiIO& io = ImGui::GetIO();
-
             m_window.updateInput();
             if (currentCameraMode == CameraMode::FlyCamera || currentCameraMode == CameraMode::MinimapCamera)
-                if(!io.WantCaptureMouse)
-                    pFlyCamera->updateInput();
+                pFlyCamera->updateInput();
             if (currentCameraMode == CameraMode::LightCamera)
-                if(!io.WantCaptureMouse)
-                    m_lightManager.crtLight().m_camera.updateInput();
+                m_lightManager.crtLight().m_camera.updateInput();
 
-            renderGui();
+            imGui();
+            
+            m_lightManager.refreshUBOs();
 
             // Clear the screen
             glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -380,15 +359,7 @@ public:
 
             // TODO: We should change this to be actual character controls, but I hate the idea of it.
             switch (currentCameraMode) {
-                case CameraMode::Trackball: { 
-                    pTrackball->enableTranslation();
-                    m_viewMatrix = pTrackball->viewMatrix();
-                    m_projectionMatrix = pTrackball->projectionMatrix();
-                    break;
-                }
-                
                 case CameraMode::FlyCamera: {
-                    pTrackball->disableTranslation();
                     m_viewMatrix = pFlyCamera->viewMatrix();
                     // TODO: This should be changed to an actual function in camera.cpp
                     m_projectionMatrix = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 100.0f);
@@ -406,14 +377,11 @@ public:
                 }
 
                 case CameraMode::LightCamera: {
-                    pTrackball->disableTranslation();
                     m_viewMatrix = m_lightManager.crtLight().m_camera.viewMatrix();
                     m_projectionMatrix = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 100.0f);
                     break;
                 }
             }
-            // m_viewMatrix = pTrackball->viewMatrix();
-            // m_projectionMatrix = pTrackball->projectionMatrix();
 
             pMinimapCamera->m_position = pFlyCamera->m_position;
             pMinimapCamera->m_forward = glm::vec3(0.f, -1.f, 0.f);
@@ -425,32 +393,19 @@ public:
             renderScene(m_defaultShader);
 
             // render quad
-
             renderMinimap();
-            m_lightManager.drawLights(m_lightShader, m_projectionMatrix * m_viewMatrix * m_modelMatrix);
-            // Processes input and swaps the window buffer
 
-            // draw debug lights
-            // {
-            //     m_lightManager.refreshVBOs();
-            //     m_lightShader.bind();
-            //
-            //     const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
-            //     glEnable(GL_PROGRAM_POINT_SIZE);
-            //     glUniformMatrix4fv(m_lightShader.getUniformLocation("mvp"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
-            //
-            //     glBindVertexArray(m_lightManager.m_VAO);
-            //     glDrawArrays(GL_POINTS, 0, m_lightManager.m_lights.size());
-            //     glBindVertexArray(0);
-            // }
-            // draw_lights(m_lightShader, lightVAO, m_projectionMatrix * m_viewMatrix * m_modelMatrix);
+            // draw the debug lights
+            m_lightManager.drawLights(m_lightShader, m_projectionMatrix * m_viewMatrix * m_modelMatrix);
             
+            // Processes input and swaps the window buffer
             m_window.swapBuffers();
         }
     }
 
-    void renderGui() {
+    void imGui() {
         // Use ImGui for easy input/output of ints, floats, strings, etc...
+        ImGuiIO& io = ImGui::GetIO();
         ImGui::Begin("Window");
         ImGui::Checkbox("Use material if no texture", &m_useMaterial);
         ImGui::Text("Camera Mode");

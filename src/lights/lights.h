@@ -32,8 +32,6 @@ namespace lum {
 
         Light& crtLight();
         void drawLights(const Shader &lightShader, const glm::mat4& mvp);
-        // void addLight(Window* window, glm::vec3 position, glm::vec4 color);
-        // void removeCrtLight();
         
         void refreshUBOs();
         void refreshVBOs();

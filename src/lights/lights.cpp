@@ -23,26 +23,16 @@ std::string Light::toString() const {
 
 LightManager::LightManager(std::vector<Light> lights)
     : m_lights(std::move(lights)) {
-    // Generate BOs
+    // Generate objects
     glGenBuffers(1, &m_VBO);
     glGenVertexArrays(1, &m_VAO);
     glGenBuffers(1, &m_UBO);
     
-    glBindVertexArray(m_VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
+    refreshVBOs(); // set them the first time around
 
-    std::vector<glm::vec4> vertices;
-    for (const auto& light : m_lights) {
-        vertices.emplace_back(light.m_camera.m_position, 1.0);
-    }
-
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec4), vertices.data(), GL_DYNAMIC_DRAW);
-    
+    // init vao only once
     glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(glm::vec4), static_cast<void *>(0));
     glEnableVertexAttribArray(0);
-    
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
 }
 
 Light &LightManager::crtLight() {
@@ -58,7 +48,6 @@ void LightManager::drawLights(const Shader& lightShader, const glm::mat4& mvp) {
     
     glBindVertexArray(m_VAO);
     glDrawArrays(GL_POINTS, 0, m_lights.size());
-    glBindVertexArray(0);
 }
 
 void LightManager::refreshUBOs() {
@@ -89,8 +78,5 @@ void LightManager::refreshVBOs() {
         vertices.emplace_back(light.m_camera.m_position, 1.0);
     }
 
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec4), vertices.data(), GL_DYNAMIC_DRAW);
-    
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
+    glBufferData(GL_ARRAY_BUFFER, m_lights.size() * sizeof(glm::vec4), vertices.data(), GL_DYNAMIC_DRAW);
 }
