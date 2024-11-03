@@ -225,7 +225,7 @@ public:
             glDisable(GL_DEPTH_TEST);
             m_quadShader.bind();
             glActiveTexture(GL_TEXTURE2);
-            glBindTexture(GL_TEXTURE_2D, minimapTex);
+            glBindTexture(GL_TEXTURE_2D, m_lightManager.m_lights[0].m_shadowMap);
             glUniform1i(m_quadShader.getUniformLocation("texture1"), 2);
             minimapOverlay.bind(GL_TEXTURE1);
             glUniform1i(m_quadShader.getUniformLocation("overlay"), 1);
@@ -331,6 +331,13 @@ public:
                     glUniform1i(shader.getUniformLocation("hasTexCoords"), GL_FALSE);
                     glUniform1i(shader.getUniformLocation("useMaterial"), m_useMaterial);
                 }
+                // bind shadow textures
+                for (int i = 0; i < m_lightManager.m_lights.size(); i++) {
+                    glActiveTexture(GL_TEXTURE1);
+                    glBindTexture(GL_TEXTURE_2D, m_lightManager.m_lights[i].m_shadowMap);
+                    glUniform1i(shader.getUniformLocation("shadowMap"), 1);
+                }
+                
                 mesh.draw(shader);
             }
         };
@@ -348,14 +355,6 @@ public:
             imGui();
             
             m_lightManager.refreshUBOs();
-
-            // Clear the screen
-            glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-            // ...
-            glEnable(GL_DEPTH_TEST);
-            glEnable(GL_BLEND);
 
             // TODO: We should change this to be actual character controls, but I hate the idea of it.
             switch (currentCameraMode) {
@@ -383,10 +382,21 @@ public:
                 }
             }
 
+
+            m_lightManager.drawShadowMaps(m_shadowShader, m_modelMatrix, m_projectionMatrix, m_meshes);
+
             pMinimapCamera->m_position = pFlyCamera->m_position;
             pMinimapCamera->m_forward = glm::vec3(0.f, -1.f, 0.f);
             glm::vec3 interim = pFlyCamera->m_forward;
             pMinimapCamera->m_up = glm::vec3(interim.x, 0.f, interim.z);
+
+            // Clear the screen
+            glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+            // ...
+            glEnable(GL_DEPTH_TEST);
+            glEnable(GL_BLEND);
 
             renderMinimapTexture();
 
