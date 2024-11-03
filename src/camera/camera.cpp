@@ -96,7 +96,7 @@ void Camera::rotateY(float angle)
 void Camera::updateInput()
 {
     // Parameters for movement
-    constexpr float maxSpeed = 2.0f;     // Maximum speed
+    float maxSpeed = 1.0f;     // Maximum speed
     float acceleration = 0.05f; // Acceleration rate per frame
     constexpr float decayFactor = 0.60f;  // Decay factor (0.90 means 10% reduction per frame)
     constexpr float lookSpeed = 0.0050f;
@@ -108,7 +108,14 @@ void Camera::updateInput()
 
         // Apply acceleration based on user input
         if (m_pWindow->isKeyPressed(GLFW_KEY_LEFT_SHIFT))
+        {
             acceleration = 1.f;
+            maxSpeed = 2.f;
+        }
+        if (m_pWindow->isKeyPressed(GLFW_KEY_LEFT_ALT))
+        {
+            maxSpeed = 0.3f;
+        }
         if (m_pWindow->isKeyPressed(GLFW_KEY_A))
             accelerationVector -= right * acceleration;
         if (m_pWindow->isKeyPressed(GLFW_KEY_D))
@@ -154,4 +161,9 @@ void Camera::updateInput()
     } else {
         m_prevCursorPos = m_pWindow->getCursorPos();
     }
+}
+
+
+void Camera::decayVelocity(float decayFactor){
+     m_velocity *= decayFactor;
 }
