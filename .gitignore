@@ -10,6 +10,7 @@ compile_commands.json
 CTestTestfile.cmake
 _deps
 CMakeUserPresets.json
+imgui.ini
 
 
 # Build directories
@@ -57,9 +58,6 @@ tags
 *.out
 *.app
 
-
-# User preference files
-*/imgui.ini
 
 # Include everything under input_data/
 !input_data/

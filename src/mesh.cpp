@@ -5,6 +5,9 @@ DISABLE_WARNINGS_PUSH()
 DISABLE_WARNINGS_POP()
 #include <iostream>
 #include <vector>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp> // for glm::translate, glm::rotate, etc.
+#include <glm/gtc/type_ptr.hpp>
 
 GPUMaterial::GPUMaterial(const Material& material) :
     kd(material.kd),
@@ -15,6 +18,9 @@ GPUMaterial::GPUMaterial(const Material& material) :
 
 GPUMesh::GPUMesh(const Mesh& cpuMesh)
 {
+
+    modelMatrix = glm::mat4(1.0f); // Identity matrix by default
+
     // Create uniform buffer to store mesh material (https://learnopengl.com/Advanced-OpenGL/Advanced-GLSL)
     GPUMaterial gpuMaterial(cpuMesh.material);
     glGenBuffers(1, &m_uboMaterial);
@@ -93,6 +99,7 @@ void GPUMesh::draw(const Shader& drawingShader)
     // Bind material data uniform (we assume that the uniform buffer objects is always called 'Material')
     // Yes, we could define the binding inside the shader itself, but that would break on OpenGL versions below 4.2
     drawingShader.bindUniformBlock("Material", 0, m_uboMaterial);
+    glUniformMatrix4fv(drawingShader.getUniformLocation("modelMatrix"),1,GL_FALSE, glm::value_ptr(modelMatrix));
     
     // Draw the mesh's triangles
     glBindVertexArray(m_vao);
@@ -127,4 +134,42 @@ void GPUMesh::freeGpuMemory()
         glDeleteBuffers(1, &m_ibo);
     if (m_uboMaterial != INVALID)
         glDeleteBuffers(1, &m_uboMaterial);
+}
+
+void GPUMesh::translate(const glm::vec3& offset) {
+    modelMatrix = glm::translate(modelMatrix, offset);
+}
+
+void GPUMesh::rotate(float angle, const glm::vec3& axis) {
+    modelMatrix = glm::rotate(modelMatrix, angle, axis);
+}
+
+void GPUMesh::scale(const glm::vec3& scaleFactors) {
+    modelMatrix = glm::scale(modelMatrix, scaleFactors);
+}
+
+
+void GPUMesh::attachToCamera(
+    const glm::vec3& cameraPos, 
+    const glm::vec3& cameraForward, 
+    const glm::vec3& cameraUp,
+    const glm::vec3& offset)  // Offset parameter with default (0,0,0)
+{
+    // First, translate the model to the camera's position
+    modelMatrix = glm::translate(glm::mat4(1.0f), cameraPos);
+
+    // Apply offset translation to the head position
+    modelMatrix = glm::translate(modelMatrix, offset);
+
+    // Calculate the angle of rotation around the y-axis
+    float angleY = atan2(cameraForward.x, cameraForward.z); // Use atan2 for better angle calculation
+
+    // Create a rotation matrix only around the Y axis
+    glm::mat4 rotationMatrix = glm::rotate(glm::mat4(1.0f), angleY, glm::vec3(0.0f, 1.0f, 0.0f));
+
+    // Apply rotation
+    modelMatrix *= rotationMatrix;
+
+    // Translate back by the inverse of the offset to maintain the correct positioning
+    modelMatrix = glm::translate(modelMatrix, -offset);
 }

@@ -46,6 +46,17 @@ public:
     // Bind VAO and call glDrawElements.
     void draw(const Shader& drawingShader);
 
+    void translate(const glm::vec3& offset);
+    void rotate(float angle, const glm::vec3& axis);
+    void scale(const glm::vec3& scaleFactors);
+    void attachToCamera(
+        const glm::vec3 &cameraPos,
+        const glm::vec3 &cameraForward,
+        const glm::vec3 &cameraUp,
+        const glm::vec3 &offset = glm::vec3(0.0f));
+
+        glm::mat4 modelMatrix { 1.0f };
+
 private:
     void moveInto(GPUMesh&&);
     void freeGpuMemory();
@@ -59,4 +70,5 @@ private:
     GLuint m_vbo { INVALID };
     GLuint m_vao { INVALID };
     GLuint m_uboMaterial { INVALID };
+    
 };

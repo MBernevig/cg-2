@@ -28,14 +28,21 @@ DISABLE_WARNINGS_POP()
 
 std::unique_ptr<Camera> pFlyCamera;
 std::unique_ptr<Camera> pMinimapCamera;
+std::unique_ptr<Camera> pTppCamera;
 
-std::vector<std::string> cameraModes = {"FlyCamera", "MinimapCamera", "LightCamera"};
+std::vector<std::string> cameraModes = {"FlyCamera", "ThirdPersonCamera", "MinimapCamera", "LightCamera"};
 enum class CameraMode
 {
     FlyCamera,
+    ThirdPersonCamera,
     MinimapCamera,
     LightCamera
 };
+
+float followDistance = 5.0f;  // Distance behind the character
+float heightOffset = 1.5f;    // Height above the character
+float sideOffset = 1.5f;      // Offset to the side (positive for right, negative for left)
+glm::vec3 characterOffset = glm::vec3(0.f,0.f,0.f);
 
 std::vector<GPUMesh> crosshair_mesh;
 
@@ -80,6 +87,7 @@ public:
     }) {
         pFlyCamera = std::make_unique<Camera>(&m_window, utils::START_POSITION, utils::START_LOOK_AT);
         pMinimapCamera = std::make_unique<Camera>(&m_window, utils::START_POSITION, utils::START_LOOK_AT);
+        pTppCamera = std::make_unique<Camera>(&m_window, utils::START_POSITION, utils::START_LOOK_AT);
 
         m_window.registerKeyCallback([this](int key, int scancode, int action, int mods)
                                      {
@@ -335,7 +343,7 @@ public:
                     glUniform1i(shader.getUniformLocation("useMaterial"), m_useMaterial);
                 }
                 // bind shadow textures
-                int textureIndices[m_lightManager.m_lights.size()];
+                int textureIndices[32];
                 for (int i = 0; i < m_lightManager.m_lights.size(); i++) {
                     glActiveTexture(GL_TEXTURE1 + i);
                     glBindTexture(GL_TEXTURE_2D, m_lightManager.m_lights[i].m_shadowMap);
@@ -352,10 +360,25 @@ public:
             // This is your game loop
             // Put your real-time logic and rendering in here
             m_window.updateInput();
-            if (currentCameraMode == CameraMode::FlyCamera || currentCameraMode == CameraMode::MinimapCamera)
-                pFlyCamera->updateInput();
-            if (currentCameraMode == CameraMode::LightCamera)
-                m_lightManager.crtLight().m_camera.updateInput();
+            // if (currentCameraMode == CameraMode::FlyCamera || currentCameraMode == CameraMode::MinimapCamera)
+            //     pFlyCamera->updateInput();
+            // if (currentCameraMode == CameraMode::LightCamera)
+            //     m_lightManager.crtLight().m_camera.updateInput();
+            ImGuiIO& io = ImGui::GetIO();
+            switch (currentCameraMode) {
+                case CameraMode::FlyCamera:
+                case CameraMode::MinimapCamera:
+                case CameraMode::ThirdPersonCamera:
+                    if (!io.WantCaptureMouse) {
+                        pFlyCamera->updateInput();
+                    }
+                    break;
+                case CameraMode::LightCamera:
+                    m_lightManager.crtLight().m_camera.updateInput();
+                    break;
+                default:
+                    break;
+            }
 
             imGui();
             
@@ -380,6 +403,13 @@ public:
                     break;
                 }
 
+                case CameraMode::ThirdPersonCamera: {
+                    m_viewMatrix = pTppCamera->viewMatrix();
+                    // TODO: This should be changed to an actual function in camera.cpp
+                    m_projectionMatrix = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 100.0f);
+                    break;
+                }
+
                 case CameraMode::LightCamera: {
                     m_viewMatrix = m_lightManager.crtLight().m_camera.viewMatrix();
                     m_projectionMatrix = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 100.0f);
@@ -392,6 +422,27 @@ public:
             pMinimapCamera->m_forward = glm::vec3(0.f, -1.f, 0.f);
             glm::vec3 interim = pFlyCamera->m_forward;
             pMinimapCamera->m_up = glm::vec3(interim.x, 0.f, interim.z);
+
+
+            if(currentCameraMode == CameraMode::ThirdPersonCamera){
+                // Calculate a rightward direction from the character's forward vector
+                glm::vec3 rightOffset = glm::normalize(glm::cross(pFlyCamera->m_forward, glm::vec3(0.0f, 1.0f, 0.0f))) * sideOffset;
+
+                // Set pTppCamera position relative to the character with an additional side offset
+                pTppCamera->m_position = pFlyCamera->m_position 
+                                        - followDistance * pFlyCamera->m_forward 
+                                        + glm::vec3(0.0f, heightOffset, 0.0f)
+                                        + rightOffset;
+
+                // Set the forward direction of the camera to look at the character's position
+                pTppCamera->m_forward = pFlyCamera->m_forward;
+
+                // Calculate a right vector based on the camera's forward direction and world up vector
+                glm::vec3 rightVector = glm::normalize(glm::cross(pTppCamera->m_forward, glm::vec3(0.0f, 1.0f, 0.0f)));
+
+                // Recalculate up vector as perpendicular to forward and right, ensuring it’s stable even when looking up/down
+                pTppCamera->m_up = glm::cross(rightVector, pTppCamera->m_forward);
+            }
 
             // Clear the screen
             glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -451,6 +502,14 @@ public:
             ImGui::Text("FlyCamera Position: (%.2f, %.2f, %.2f)", pFlyCamera->m_position.x, pFlyCamera->m_position.y, pFlyCamera->m_position.z);
             ImGui::Text("FlyCamera Forward: (%.2f, %.2f, %.2f)", pFlyCamera->m_forward.x, pFlyCamera->m_forward.y, pFlyCamera->m_forward.z);
             ImGui::Text("FlyCamera Up: (%.2f, %.2f, %.2f)", pFlyCamera->m_up.x, pFlyCamera->m_up.y, pFlyCamera->m_up.z);
+        }
+
+        if (ImGui::CollapsingHeader("Third Person Camera"))
+        {
+            ImGui::DragFloat("Follow Distance", &followDistance, 0.1f, 0.0f, 20.0f, "%.1f");
+            ImGui::DragFloat("Height Offset", &heightOffset, 0.1f, 0.0f, 20.0f, "%.1f");
+            ImGui::DragFloat("Side Offset", &sideOffset, 0.1f, -10.0f, 10.0f, "%.1f");
+            ImGui::DragFloat3("Character Offset", glm::value_ptr(characterOffset), 0.1f, -10.0f, 10.0f, "%.1f");
         }
 
         ImGui::Separator();
