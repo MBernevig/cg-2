@@ -19,7 +19,7 @@ layout(std140) uniform lightBuffer {
     Light lights[32];
 };
 
-uniform sampler2D shadowMap;
+uniform sampler2D shadowMap[10];
 
 uniform sampler2D colorMap;
 uniform bool hasTexCoords;
@@ -53,14 +53,18 @@ bool shadow_test(int lightIndex)
 
     // Depth of the fragment with respect to the light
     float fragLightDepth = fragLightCoord.z;
+    
+    // Outside the texture, so return false to prevent what's outside the lights fov from being in shadow
+    if (fragLightDepth > 1.0)
+        return false;
 
     // Shadow map coordinate corresponding to this fragment
     vec2 shadowMapCoord = fragLightCoord.xy;
 
     // Shadow map value from the corresponding shadow map position
-    float shadowMapDepth = texture(shadowMap, shadowMapCoord).x;
+    float shadowMapDepth = texture(shadowMap[lightIndex], shadowMapCoord).x;
 
-    return (shadowMapDepth + 0.001 <= fragLightDepth);
+    return (shadowMapDepth + 0.0001 <= fragLightDepth);
 }
 
 void main()
@@ -76,12 +80,10 @@ void main()
     fragColor = vec4(0.f);
 
     for(int i = 0; i < light_count; i++){
-        vec3 lightDir = normalize(lights[i].position.rgb - gl_FragCoord.xyz);
-        float diff = max(dot(normal, lightDir), 0.0);
-        vec3 diffuse = diff * lights[i].color.rgb * fullColor;
-        
+        // ambient
+        fragColor += vec4(0.12, 0.1, 0.1, 1.0);
         if (shadow_test(i)) {
-            fragColor -= vec4(1.0, 1.0, 1.0, 1.0) / light_count;
+            // don't do anything
         } else {
             // lambert
             fragColor += lights[i].color * vec4(kd * dot(fragNormal, normalize(lights[i].position.xyz - fragPosition)), 1.0);
@@ -94,4 +96,5 @@ void main()
             fragColor += LH_dot < 0 || NV_dot < 0 ? vec4(0.0) : lights[i].color * vec4(ks * pow(LH_dot, shininess), 1.0);
         }
     }
+    fragColor /= light_count; // blending
 }

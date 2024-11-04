@@ -101,6 +101,7 @@ void LightManager::drawShadowMaps(
     glViewport(0, 0, Light::SHADOW_WIDTH, Light::SHADOW_HEIGHT);
 
     glEnable(GL_DEPTH_TEST);
+    // glCullFace(GL_FRONT);
 
     for (auto &light: m_lights) {
         light.drawShadowMap(shadowShader, projectionMatrix * light.m_camera.viewMatrix() * modelMatrix, meshes);
@@ -113,6 +114,7 @@ void LightManager::drawShadowMaps(
     glViewport(0, 0, utils::WIDTH, utils::HEIGHT);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    // glCullFace(GL_BACK);
 }
 
 void LightManager::refreshUBOs() {

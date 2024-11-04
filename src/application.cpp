@@ -134,6 +134,9 @@ public:
         {
             std::cerr << e.what() << std::endl;
         }
+
+        // face culling for better shadows
+        glEnable(GL_CULL_FACE);
     }
 
     void update()
@@ -225,7 +228,7 @@ public:
             glDisable(GL_DEPTH_TEST);
             m_quadShader.bind();
             glActiveTexture(GL_TEXTURE2);
-            glBindTexture(GL_TEXTURE_2D, m_lightManager.m_lights[0].m_shadowMap);
+            glBindTexture(GL_TEXTURE_2D, minimapTex);
             glUniform1i(m_quadShader.getUniformLocation("texture1"), 2);
             minimapOverlay.bind(GL_TEXTURE1);
             glUniform1i(m_quadShader.getUniformLocation("overlay"), 1);
@@ -332,12 +335,13 @@ public:
                     glUniform1i(shader.getUniformLocation("useMaterial"), m_useMaterial);
                 }
                 // bind shadow textures
+                int textureIndices[m_lightManager.m_lights.size()];
                 for (int i = 0; i < m_lightManager.m_lights.size(); i++) {
-                    glActiveTexture(GL_TEXTURE1);
+                    glActiveTexture(GL_TEXTURE1 + i);
                     glBindTexture(GL_TEXTURE_2D, m_lightManager.m_lights[i].m_shadowMap);
-                    glUniform1i(shader.getUniformLocation("shadowMap"), 1);
-                    const glm::mat4& lightMVP = m_lightManager.m_lights[i].m_mvp; 
+                    textureIndices[i] = i + 1;
                 }
+                glUniform1iv(shader.getUniformLocation("shadowMap"), m_lightManager.m_lights.size(), textureIndices);
 
                 mesh.draw(shader);
             }
@@ -384,8 +388,6 @@ public:
             }
 
 
-            m_lightManager.drawShadowMaps(m_shadowShader, m_modelMatrix, m_projectionMatrix, m_meshes);
-
             pMinimapCamera->m_position = pFlyCamera->m_position;
             pMinimapCamera->m_forward = glm::vec3(0.f, -1.f, 0.f);
             glm::vec3 interim = pFlyCamera->m_forward;
@@ -400,6 +402,8 @@ public:
             glEnable(GL_BLEND);
 
             renderMinimapTexture();
+
+            m_lightManager.drawShadowMaps(m_shadowShader, m_modelMatrix, m_projectionMatrix, m_meshes);
 
             renderScene(m_defaultShader);
 
