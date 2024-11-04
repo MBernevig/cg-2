@@ -86,7 +86,7 @@ void main()
             // don't do anything
         } else {
             // lambert
-            fragColor += lights[i].color * vec4(kd * dot(fragNormal, normalize(lights[i].position.xyz - fragPosition)), 1.0);
+            fragColor += lights[i].color * vec4(fullColor * dot(fragNormal, normalize(lights[i].position.xyz - fragPosition)), 1.0);
             // blinn-phong
             vec3 L = normalize(lights[i].position.xyz - fragPosition);
             vec3 V = normalize(cameraPosition - fragPosition);
