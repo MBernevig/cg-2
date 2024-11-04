@@ -28,6 +28,8 @@ namespace lum {
         Camera m_camera;
         glm::vec4 m_color;
 
+        glm::mat4 m_mvp = glm::mat4(1.f);
+
         GLuint m_shadowMapFBO;
         GLuint m_shadowMap;
     };

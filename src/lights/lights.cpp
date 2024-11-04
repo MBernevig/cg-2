@@ -40,6 +40,9 @@ std::string Light::toString() const {
 }
 
 void Light::drawShadowMap(const Shader &shadowShader, const glm::mat4 &mvpMatrix, std::vector<GPUMesh> &meshes) {
+
+    m_mvp = mvpMatrix;
+
     glBindFramebuffer(GL_FRAMEBUFFER, m_shadowMapFBO);
 
     // clear shadow map
@@ -48,7 +51,7 @@ void Light::drawShadowMap(const Shader &shadowShader, const glm::mat4 &mvpMatrix
 
     for (auto &mesh: meshes) {
         shadowShader.bind();
-        glUniformMatrix4fv(shadowShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
+        glUniformMatrix4fv(shadowShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(m_mvp));
         mesh.draw(shadowShader);
     }
 }
@@ -126,7 +129,7 @@ void LightManager::refreshUBOs() {
         light_shading_data.emplace_back(
             glm::vec4(light.m_camera.m_position, 1.0),
             light.m_color,
-            light.m_camera.viewMatrix()
+            light.m_mvp
         );
     }
     //Now the light data

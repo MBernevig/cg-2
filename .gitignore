@@ -57,6 +57,10 @@ tags
 *.out
 *.app
 
+
+# User preference files
+*/imgui.ini
+
 # Include everything under input_data/
 !input_data/
 !resources/

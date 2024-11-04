@@ -35,7 +35,7 @@ layout(location = 0) out vec4 fragColor;
 
 vec3 get_frag_light_coord(int lightIndex)
 {
-    vec4 fragLightCoord = lights[lightIndex].lightMVP * vec4(fragPosition, 1.0);
+    vec4 fragLightCoord = lights[lightIndex].lightMVP * vec4(fragPosition,1.f);
 
     // Divide by w because fragLightCoord are homogeneous coordinates
     fragLightCoord.xyz /= fragLightCoord.w;
@@ -76,7 +76,7 @@ void main()
     fragColor = vec4(0.f);
 
     for(int i = 0; i < light_count; i++){
-        vec3 lightDir = normalize(lights[i].position.rgb - fragPosition);
+        vec3 lightDir = normalize(lights[i].position.rgb - gl_FragCoord.xyz);
         float diff = max(dot(normal, lightDir), 0.0);
         vec3 diffuse = diff * lights[i].color.rgb * fullColor;
         

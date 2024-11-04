@@ -336,8 +336,9 @@ public:
                     glActiveTexture(GL_TEXTURE1);
                     glBindTexture(GL_TEXTURE_2D, m_lightManager.m_lights[i].m_shadowMap);
                     glUniform1i(shader.getUniformLocation("shadowMap"), 1);
+                    const glm::mat4& lightMVP = m_lightManager.m_lights[i].m_mvp; 
                 }
-                
+
                 mesh.draw(shader);
             }
         };
