@@ -116,6 +116,10 @@ void GPUMesh::moveInto(GPUMesh&& other)
     m_vao = other.m_vao;
     m_uboMaterial = other.m_uboMaterial;
 
+    texture = other.texture;
+    modelMatrix = other.modelMatrix;
+    renderFPV  = other.renderFPV;
+
     other.m_numIndices = 0;
     other.m_hasTextureCoords = other.m_hasTextureCoords;
     other.m_ibo = INVALID;
@@ -155,11 +159,12 @@ void GPUMesh::attachToCamera(
     const glm::vec3& cameraUp,
     const glm::vec3& offset)  // Offset parameter with default (0,0,0)
 {
-    // First, translate the model to the camera's position
-    modelMatrix = glm::translate(glm::mat4(1.0f), cameraPos);
-
     // Apply offset translation to the head position
-    modelMatrix = glm::translate(modelMatrix, offset);
+    modelMatrix = glm::translate(glm::mat4(1.0f), offset);
+
+    // First, translate the model to the camera's position
+    modelMatrix = glm::translate(modelMatrix, cameraPos);
+
 
     // Calculate the angle of rotation around the y-axis
     float angleY = atan2(cameraForward.x, cameraForward.z); // Use atan2 for better angle calculation
@@ -171,5 +176,5 @@ void GPUMesh::attachToCamera(
     modelMatrix *= rotationMatrix;
 
     // Translate back by the inverse of the offset to maintain the correct positioning
-    modelMatrix = glm::translate(modelMatrix, -offset);
+    // modelMatrix = glm::translate(modelMatrix, -offset);
 }

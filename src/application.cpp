@@ -26,6 +26,10 @@ DISABLE_WARNINGS_POP()
 #include <camera.h>
 #include <constants.h>
 
+
+const float fixedTimeStep = 0.016f; // 60 ticks per sec
+float frameTimeAccumulator = 0.0f; // use this to add up skipped timesteps
+
 std::unique_ptr<Camera> pFlyCamera;
 std::unique_ptr<Camera> pMinimapCamera;
 std::unique_ptr<Camera> pTppCamera;
@@ -42,7 +46,7 @@ enum class CameraMode
 float followDistance = 5.0f;  // Distance behind the character
 float heightOffset = 1.5f;    // Height above the character
 float sideOffset = 1.5f;      // Offset to the side (positive for right, negative for left)
-glm::vec3 characterOffset = glm::vec3(0.f,0.f,0.f);
+glm::vec3 characterOffset = glm::vec3(0.f,-3.5f,0.f);
 
 std::vector<GPUMesh> crosshair_mesh;
 
@@ -186,6 +190,29 @@ public:
 
         // END MINIMAP INITs ********************************************************************************************
 
+        // EXTRA MESHES
+
+        std::vector<GPUMesh> screen = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/screen.obj");
+
+        std::vector<GPUMesh> character = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/character.obj");
+
+        // Add screen to m_meshes and keep a pointer to the added value
+        
+        
+        m_meshes.emplace_back(std::move(screen[0]));
+        GPUMesh* screenMesh = &m_meshes.back();
+
+        screenMesh->translate(glm::vec3(5.0f, 5.0f, 1.0f));
+        screenMesh->rotate(glm::radians(-90.f), glm::vec3(1.f,0.f,0.f));
+        Texture screenTexture(RESOURCE_ROOT "resources/textures/doggos.jpg");
+
+        // screenMesh->texture = &screenTexture;
+
+        m_meshes.emplace_back(std::move(character[0]));
+        GPUMesh* characterMesh = &m_meshes.back();
+        characterMesh->texture = &screenTexture;
+        characterMesh->renderFPV = false;
+
         // RENDER FUNCTIONS *********************************************************************************************
         auto renderMinimapTexture = [&]
         {
@@ -214,9 +241,9 @@ public:
                 // glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
                 glUniformMatrix3fv(m_minimapShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
 
-                if (mesh.hasTextureCoords())
+                if (mesh.hasTextureCoords() && mesh.texture != nullptr)
                 {
-                    m_texture.bind(GL_TEXTURE0);
+                    mesh.texture->bind(GL_TEXTURE0);
                     glUniform1i(m_minimapShader.getUniformLocation("colorMap"), 0);
                     glUniform1i(m_minimapShader.getUniformLocation("hasTexCoords"), GL_TRUE);
                     glUniform1i(m_minimapShader.getUniformLocation("useMaterial"), GL_FALSE);
@@ -318,6 +345,8 @@ public:
 
             for (GPUMesh &mesh : m_meshes)
             {
+                //Don't render character for FPV
+                if(currentCameraMode == CameraMode::FlyCamera && !mesh.renderFPV ) continue;
                 const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * mesh.modelMatrix;
                 // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
                 // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
@@ -331,9 +360,9 @@ public:
                 // Uncomment this line when you use the modelMatrix (or fragmentPosition)
                 // glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
                 glUniformMatrix3fv(shader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
-                if (mesh.hasTextureCoords())
+                if (mesh.hasTextureCoords() && mesh.texture != nullptr)
                 {
-                    m_texture.bind(GL_TEXTURE0);
+                    mesh.texture->bind(GL_TEXTURE0);
                     glUniform1i(shader.getUniformLocation("colorMap"), 0);
                     glUniform1i(shader.getUniformLocation("hasTexCoords"), GL_TRUE);
                     glUniform1i(shader.getUniformLocation("useMaterial"), GL_FALSE);
@@ -355,31 +384,48 @@ public:
                 mesh.draw(shader);
             }
         };
+
+
+        int tickCounter = 0;
+
+        float previousTime = static_cast<float>(glfwGetTime());
+
+
         // GAME LOOP ****************************************************************************************************
         while (!m_window.shouldClose())
         {
+
+            m_window.updateInput();
+
+            ImGuiIO& io = ImGui::GetIO();
+
+
+            float currentTime = static_cast<float>(glfwGetTime());
+            float frameTime = currentTime - previousTime;
+            previousTime = currentTime;
+            frameTimeAccumulator += frameTime;
+
+            while(frameTimeAccumulator >= fixedTimeStep) {
+
+                switch (currentCameraMode) {
+                    case CameraMode::FlyCamera:
+                    case CameraMode::MinimapCamera:
+                    case CameraMode::ThirdPersonCamera:
+                        if (!io.WantCaptureMouse) {
+                            pFlyCamera->updateInput();
+                        }
+                        break;
+                    case CameraMode::LightCamera:
+                        m_lightManager.crtLight().m_camera.updateInput();
+                        break;
+                    default:
+                        break;
+                }
+                tickCounter++;
+                frameTimeAccumulator -= fixedTimeStep;
+            }
             // This is your game loop
             // Put your real-time logic and rendering in here
-            m_window.updateInput();
-            // if (currentCameraMode == CameraMode::FlyCamera || currentCameraMode == CameraMode::MinimapCamera)
-            //     pFlyCamera->updateInput();
-            // if (currentCameraMode == CameraMode::LightCamera)
-            //     m_lightManager.crtLight().m_camera.updateInput();
-            ImGuiIO& io = ImGui::GetIO();
-            switch (currentCameraMode) {
-                case CameraMode::FlyCamera:
-                case CameraMode::MinimapCamera:
-                case CameraMode::ThirdPersonCamera:
-                    if (!io.WantCaptureMouse) {
-                        pFlyCamera->updateInput();
-                    }
-                    break;
-                case CameraMode::LightCamera:
-                    m_lightManager.crtLight().m_camera.updateInput();
-                    break;
-                default:
-                    break;
-            }
 
             imGui();
             
@@ -445,6 +491,7 @@ public:
                 pTppCamera->m_up = glm::cross(rightVector, pTppCamera->m_forward);
             }
 
+            characterMesh->attachToCamera(pFlyCamera->m_position, pFlyCamera->m_forward, pFlyCamera->m_up, characterOffset);
             // Clear the screen
             glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -452,7 +499,6 @@ public:
             // ...
             glEnable(GL_DEPTH_TEST);
             glEnable(GL_BLEND);
-
 
             m_lightManager.drawShadowMaps(m_shadowShader, m_modelMatrix, m_projectionMatrix, m_meshes);
 
@@ -464,7 +510,6 @@ public:
 
             // draw the debug lights
             m_lightManager.drawLights(m_lightShader, m_projectionMatrix * m_viewMatrix * m_modelMatrix);
-
             
             // Processes input and swaps the window buffer
             m_window.swapBuffers();

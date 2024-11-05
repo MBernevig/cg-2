@@ -10,6 +10,7 @@ DISABLE_WARNINGS_POP()
 #include <exception>
 #include <filesystem>
 #include <framework/opengl_includes.h>
+#include "texture.h"
 
 struct MeshLoadingException : public std::runtime_error {
     using std::runtime_error::runtime_error;
@@ -55,8 +56,11 @@ public:
         const glm::vec3 &cameraUp,
         const glm::vec3 &offset = glm::vec3(0.0f));
 
-        glm::mat4 modelMatrix { 1.0f };
+    glm::mat4 modelMatrix { 1.0f };
+    Texture* texture;
 
+    bool renderFPV = true;
+    
 private:
     void moveInto(GPUMesh&&);
     void freeGpuMemory();
