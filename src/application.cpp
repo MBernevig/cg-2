@@ -27,9 +27,43 @@ DISABLE_WARNINGS_POP()
 #include <camera.h>
 #include <constants.h>
 
+float skyboxVertices[] =
+    {
+        //   Coordinates
+        -1.0f, -1.0f, 1.0f,  //        7--------6
+        1.0f, -1.0f, 1.0f,   //       /|       /|
+        1.0f, -1.0f, -1.0f,  //      4--------5 |
+        -1.0f, -1.0f, -1.0f, //      | |      | |
+        -1.0f, 1.0f, 1.0f,   //      | 3------|-2
+        1.0f, 1.0f, 1.0f,    //      |/       |/
+        1.0f, 1.0f, -1.0f,   //      0--------1
+        -1.0f, 1.0f, -1.0f};
+
+unsigned int skyboxIndices[] =
+    {
+        // Right
+        1, 2, 6,
+        6, 5, 1,
+        // Left
+        0, 4, 7,
+        7, 3, 0,
+        // Top
+        4, 5, 6,
+        6, 7, 4,
+        // Bottom
+        0, 3, 2,
+        2, 1, 0,
+        // Back
+        0, 1, 5,
+        5, 4, 0,
+        // Front
+        3, 7, 6,
+        6, 2, 3};
 
 const float fixedTimeStep = 0.016f; // 60 ticks per sec
-float frameTimeAccumulator = 0.0f; // use this to add up skipped timesteps
+float frameTimeAccumulator = 0.0f;  // use this to add up skipped timesteps
+
+bool showMinimap = true;
 
 std::unique_ptr<Camera> pFlyCamera;
 std::unique_ptr<Camera> pMinimapCamera;
@@ -44,10 +78,10 @@ enum class CameraMode
     LightCamera
 };
 
-float followDistance = 5.0f;  // Distance behind the character
-float heightOffset = 1.5f;    // Height above the character
-float sideOffset = 1.5f;      // Offset to the side (positive for right, negative for left)
-glm::vec3 characterOffset = glm::vec3(0.f,-3.5f,0.f);
+float followDistance = 5.0f; // Distance behind the character
+float heightOffset = 1.5f;   // Height above the character
+float sideOffset = 1.5f;     // Offset to the side (positive for right, negative for left)
+glm::vec3 characterOffset = glm::vec3(0.f, -3.5f, 0.f);
 
 std::vector<GPUMesh> crosshair_mesh;
 
@@ -71,25 +105,23 @@ float minimap_ortho_height = 25.f;
 
 CameraMode currentCameraMode = CameraMode::FlyCamera;
 
-// UBOs must always use vec4s, vec2s, or scalars, NEVER vec3 
+// UBOs must always use vec4s, vec2s, or scalars, NEVER vec3
 // https://stackoverflow.com/questions/38172696/should-i-ever-use-a-vec3-inside-of-a-uniform-buffer-or-shader-storage-buffer-o
 // This is very annoying.
-struct Light {
+struct Light
+{
     glm::vec4 position;
     glm::vec4 color;
 };
-
-
 
 class Application
 {
 public:
     Application()
-    : m_window("Final Project", glm::ivec2(utils::WIDTH, utils::HEIGHT), OpenGLVersion::GL41),
-    m_texture(RESOURCE_ROOT "resources/pattern.png"),
-    m_lightManager({
-        lum::Light(&m_window, glm::vec4(6.f, 3.f, -10.f, -0.f), glm::vec4(1.f, 1.f, 1.f, 0.f))
-    }) {
+        : m_window("Final Project", glm::ivec2(utils::WIDTH, utils::HEIGHT), OpenGLVersion::GL41),
+          m_texture(RESOURCE_ROOT "resources/pattern.png"),
+          m_lightManager({lum::Light(&m_window, glm::vec4(6.f, 3.f, -10.f, -0.f), glm::vec4(1.f, 1.f, 1.f, 0.f))})
+    {
         pFlyCamera = std::make_unique<Camera>(&m_window, utils::START_POSITION, utils::START_LOOK_AT);
         pMinimapCamera = std::make_unique<Camera>(&m_window, utils::START_POSITION, utils::START_LOOK_AT);
         pTppCamera = std::make_unique<Camera>(&m_window, utils::START_POSITION, utils::START_LOOK_AT);
@@ -138,8 +170,8 @@ public:
             m_lightShader = lightBuilder.build();
 
             ShaderBuilder skyboxBuilder;
-            skyboxBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/light_vertex.glsl");
-            skyboxBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/light_frag.glsl");
+            skyboxBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/skybox_vert.glsl");
+            skyboxBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/skybox_frag.glsl");
             m_skyboxShader = skyboxBuilder.build();
 
             // Any new shaders can be added below in similar fashion.
@@ -183,8 +215,6 @@ public:
             std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-        Texture minimapOverlay = Texture(RESOURCE_ROOT "resources/map_overlay.png");
-
         GLuint quad_vbo;
         glGenBuffers(1, &quad_vbo);
         GLuint tex_vbo;
@@ -206,20 +236,32 @@ public:
             RESOURCE_ROOT "resources/textures/py.png",
             RESOURCE_ROOT "resources/textures/ny.png",
             RESOURCE_ROOT "resources/textures/pz.png",
-            RESOURCE_ROOT "resources/textures/nz.png"
-        };
+            RESOURCE_ROOT "resources/textures/nz.png"};
 
         unsigned int skyboxTex;
         glGenTextures(1, &skyboxTex);
         glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTex);
 
-        for (unsigned int i = 0; i < 6; i++) {
+        for (unsigned int i = 0; i < 6; i++)
+        {
             int widthSky, heightSky, nrChannels;
             unsigned char *data = stbi_load(facesSkybox[i].c_str(), &widthSky, &heightSky, &nrChannels, 0);
-            if (data) {
-                glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB, widthSky, heightSky, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+            if (data)
+            {
+                glTexImage2D(
+                    GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
+                    0,
+                    GL_RGBA,
+                    widthSky,
+                    heightSky,
+                    0,
+                    GL_RGBA,
+                    GL_UNSIGNED_BYTE,
+                    data);
                 stbi_image_free(data);
-            } else {
+            }
+            else
+            {
                 std::cout << "Cubemap texture failed to load at path: " << facesSkybox[i] << std::endl;
                 stbi_image_free(data);
             }
@@ -230,31 +272,69 @@ public:
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
-        std::vector<GPUMesh> screen = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/screen.obj");
+        std::vector<GPUMesh> screen = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/unitCube.obj");
 
         std::vector<GPUMesh> character = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/character.obj");
 
         // Add screen to m_meshes and keep a pointer to the added value
         Texture screenTexture(RESOURCE_ROOT "resources/textures/doggos.jpg");
 
+        screen[0].texture = &screenTexture;
         // screenMesh->texture = &screenTexture;
 
         m_meshes.emplace_back(std::move(character[0]));
-        GPUMesh* characterMesh = &m_meshes.back();
+        GPUMesh *characterMesh = &m_meshes.back();
         characterMesh->texture = &screenTexture;
         characterMesh->renderFPV = false;
 
-        // RENDER FUNCTIONS *********************************************************************************************
-        auto renderSkybox = [&] {
-            glDepthFunc(GL_LEQUAL);
-            m_skyboxShader.bind();
-            glm::mat4 view = glm::mat4(glm::mat3(m_viewMatrix)); // Remove translation from the view matrix
-            glm::mat4 projection = m_projectionMatrix;
-            glUniformMatrix4fv(m_skyboxShader.getUniformLocation("view"), 1, GL_FALSE, glm::value_ptr(view));
-            glUniformMatrix4fv(m_skyboxShader.getUniformLocation("projection"), 1, GL_FALSE, glm::value_ptr(projection));
+        // Create VAO, VBO, and EBO for the skybox
+        unsigned int skyboxVAO, skyboxVBO, skyboxEBO;
+        glGenVertexArrays(1, &skyboxVAO);
+        glGenBuffers(1, &skyboxVBO);
+        glGenBuffers(1, &skyboxEBO);
+        glBindVertexArray(skyboxVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, skyboxEBO);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(skyboxIndices), &skyboxIndices, GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
+        glEnableVertexAttribArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindVertexArray(0);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
-            skybox[0].draw(m_skyboxShader);
+        // RENDER FUNCTIONS *********************************************************************************************
+        auto renderSkybox = [&]
+        {
+            glEnable(GL_DEPTH_TEST);
+            glDisable(GL_CULL_FACE);
+            glDepthFunc(GL_LEQUAL);
+
+            m_skyboxShader.bind();
+            glm::mat4 view = glm::mat4(1.0f);
+            glm::mat4 projection = glm::mat4(1.0f);
+            // We make the mat4 into a mat3 and then a mat4 again in order to get rid of the last row and column
+            // The last row and column affect the translation of the skybox (which we don't want to affect)
+            view = glm::mat4(glm::mat3(pFlyCamera->viewMatrix()));
+
+            projection = glm::perspective(glm::radians(45.0f), (float)width / height, 0.1f, 100.0f);
+            glUniformMatrix4fv(m_skyboxShader.getUniformLocation("viewSkybox"), 1, GL_FALSE, glm::value_ptr(view));
+            glUniformMatrix4fv(m_skyboxShader.getUniformLocation("projectionSkybox"), 1, GL_FALSE, glm::value_ptr(projection));
+
+            // Draws the cubemap as the last object so we can save a bit of performance by discarding all fragments
+            // where an object is present (a depth of 1.0f will always fail against any object's depth value)
+            // glDepthMask(GL_FALSE);
+            glBindVertexArray(skyboxVAO);
+            glActiveTexture(GL_TEXTURE4);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTex);
+            glUniform1i(m_skyboxShader.getUniformLocation("skybox"), 4);
+            glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
+            glBindVertexArray(0);
+            // glDepthMask(GL_TRUE);
+
+            // Switch back to the normal depth function
             glDepthFunc(GL_LESS);
+            glEnable(GL_CULL_FACE);
         };
 
         auto renderMinimapTexture = [&]
@@ -270,7 +350,6 @@ public:
             float orthoWidth = minimap_ortho_height * utils::ASPECT_RATIO;
 
             const glm::mat4 m_projection2 = glm::ortho(-orthoWidth, orthoWidth, -minimap_ortho_height, minimap_ortho_height, 0.1f, 100.0f);
-
 
             for (GPUMesh &mesh : m_meshes)
             {
@@ -308,8 +387,6 @@ public:
             glActiveTexture(GL_TEXTURE2);
             glBindTexture(GL_TEXTURE_2D, minimapTex);
             glUniform1i(m_quadShader.getUniformLocation("texture1"), 2);
-            minimapOverlay.bind(GL_TEXTURE1);
-            glUniform1i(m_quadShader.getUniformLocation("overlay"), 1);
 
             const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
             // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
@@ -343,7 +420,7 @@ public:
             };
 
             // Create and bind the vertex buffer object (VBO) for positions
-            
+
             glBindBuffer(GL_ARRAY_BUFFER, quad_vbo);
             glBufferData(GL_ARRAY_BUFFER, 4 * sizeof(glm::vec3), quad_vertices, GL_STATIC_DRAW);
 
@@ -380,16 +457,17 @@ public:
 
             glBindBuffer(GL_ARRAY_BUFFER, 0);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+            glEnable(GL_DEPTH_TEST);
         };
 
         auto renderScene = [&](const Shader &shader)
         {
-
-
             for (GPUMesh &mesh : m_meshes)
             {
-                //Don't render character for FPV
-                if(currentCameraMode == CameraMode::FlyCamera && !mesh.renderFPV ) continue;
+                // Don't render character for FPV
+                if (currentCameraMode == CameraMode::FlyCamera && !mesh.renderFPV)
+                    continue;
                 const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * mesh.modelMatrix;
                 // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
                 // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
@@ -399,7 +477,7 @@ public:
                 shader.bindUniformBlock("lightBuffer", 1, m_lightManager.m_UBO);
                 glUniform3fv(shader.getUniformLocation("cameraPosition"), 1, glm::value_ptr(pFlyCamera->cameraPos()));
                 glUniformMatrix4fv(shader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
-                glUniformMatrix4fv(shader.getUniformLocation("meshModelMatrix"),1,GL_FALSE, glm::value_ptr(mesh.modelMatrix));
+                glUniformMatrix4fv(shader.getUniformLocation("meshModelMatrix"), 1, GL_FALSE, glm::value_ptr(mesh.modelMatrix));
                 // Uncomment this line when you use the modelMatrix (or fragmentPosition)
                 // glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
                 glUniformMatrix3fv(shader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
@@ -417,7 +495,8 @@ public:
                 }
                 // bind shadow textures
                 int textureIndices[32];
-                for (int i = 0; i < m_lightManager.m_lights.size(); i++) {
+                for (int i = 0; i < m_lightManager.m_lights.size(); i++)
+                {
                     glActiveTexture(GL_TEXTURE1 + i);
                     glBindTexture(GL_TEXTURE_2D, m_lightManager.m_lights[i].m_shadowMap);
                     textureIndices[i] = i + 1;
@@ -428,11 +507,9 @@ public:
             }
         };
 
-
         int tickCounter = 0;
 
         float previousTime = static_cast<float>(glfwGetTime());
-
 
         // GAME LOOP ****************************************************************************************************
         while (!m_window.shouldClose())
@@ -440,89 +517,92 @@ public:
 
             m_window.updateInput();
 
-            ImGuiIO& io = ImGui::GetIO();
-
+            ImGuiIO &io = ImGui::GetIO();
 
             float currentTime = static_cast<float>(glfwGetTime());
             float frameTime = currentTime - previousTime;
             previousTime = currentTime;
             frameTimeAccumulator += frameTime;
 
-            while(frameTimeAccumulator >= fixedTimeStep) {
+            while (frameTimeAccumulator >= fixedTimeStep)
+            {
 
-                switch (currentCameraMode) {
-                    case CameraMode::FlyCamera:
-                    case CameraMode::MinimapCamera:
-                    case CameraMode::ThirdPersonCamera:
-                        if (!io.WantCaptureMouse) {
-                            pFlyCamera->updateInput();
-                        }
-                        break;
-                    case CameraMode::LightCamera:
-                        m_lightManager.crtLight().m_camera.updateInput();
-                        break;
-                    default:
-                        break;
-                }
                 tickCounter++;
                 frameTimeAccumulator -= fixedTimeStep;
+            }
+            switch (currentCameraMode)
+            {
+            case CameraMode::FlyCamera:
+            case CameraMode::MinimapCamera:
+            case CameraMode::ThirdPersonCamera:
+                if (!io.WantCaptureMouse)
+                {
+                    pFlyCamera->updateInput();
+                }
+                break;
+            case CameraMode::LightCamera:
+                m_lightManager.crtLight().m_camera.updateInput();
+                break;
+            default:
+                break;
             }
             // This is your game loop
             // Put your real-time logic and rendering in here
 
             imGui();
-            
+
             m_lightManager.refreshUBOs();
 
             // TODO: We should change this to be actual character controls, but I hate the idea of it.
-            switch (currentCameraMode) {
-                case CameraMode::FlyCamera: {
-                    m_viewMatrix = pFlyCamera->viewMatrix();
-                    // TODO: This should be changed to an actual function in camera.cpp
-                    m_projectionMatrix = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 100.0f);
-                    break;
-                }
-                    
-                case CameraMode::MinimapCamera: {
-                    m_viewMatrix = pMinimapCamera->viewMatrix();
-                    // TODO: This should be changed to an actual function in camera.cpp
-                    float orthoWidth = minimap_ortho_height * utils::ASPECT_RATIO;
-
-                    const glm::mat4 m_projection2 = glm::ortho(-orthoWidth, orthoWidth, -minimap_ortho_height, minimap_ortho_height, 0.1f, 100.0f);
-                    m_projectionMatrix = m_projection2;
-                    break;
-                }
-
-                case CameraMode::ThirdPersonCamera: {
-                    m_viewMatrix = pTppCamera->viewMatrix();
-                    // TODO: This should be changed to an actual function in camera.cpp
-                    m_projectionMatrix = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 100.0f);
-                    break;
-                }
-
-                case CameraMode::LightCamera: {
-                    m_viewMatrix = m_lightManager.crtLight().m_camera.viewMatrix();
-                    m_projectionMatrix = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 100.0f);
-                    break;
-                }
+            switch (currentCameraMode)
+            {
+            case CameraMode::FlyCamera:
+            {
+                m_viewMatrix = pFlyCamera->viewMatrix();
+                // TODO: This should be changed to an actual function in camera.cpp
+                m_projectionMatrix = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 100.0f);
+                break;
             }
 
+            case CameraMode::MinimapCamera:
+            {
+                m_viewMatrix = pMinimapCamera->viewMatrix();
+                // TODO: This should be changed to an actual function in camera.cpp
+                float orthoWidth = minimap_ortho_height * utils::ASPECT_RATIO;
+
+                const glm::mat4 m_projection2 = glm::ortho(-orthoWidth, orthoWidth, -minimap_ortho_height, minimap_ortho_height, 0.1f, 100.0f);
+                m_projectionMatrix = m_projection2;
+                break;
+            }
+
+            case CameraMode::ThirdPersonCamera:
+            {
+                m_viewMatrix = pTppCamera->viewMatrix();
+                // TODO: This should be changed to an actual function in camera.cpp
+                m_projectionMatrix = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 100.0f);
+                break;
+            }
+
+            case CameraMode::LightCamera:
+            {
+                m_viewMatrix = m_lightManager.crtLight().m_camera.viewMatrix();
+                m_projectionMatrix = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 100.0f);
+                break;
+            }
+            }
 
             pMinimapCamera->m_position = pFlyCamera->m_position;
             pMinimapCamera->m_forward = glm::vec3(0.f, -1.f, 0.f);
             glm::vec3 interim = pFlyCamera->m_forward;
             pMinimapCamera->m_up = glm::vec3(interim.x, 0.f, interim.z);
 
-            
-            if(currentCameraMode == CameraMode::ThirdPersonCamera){
+            if (currentCameraMode == CameraMode::ThirdPersonCamera)
+            {
                 // Calculate a rightward direction from the character's forward vector
                 glm::vec3 rightOffset = glm::normalize(glm::cross(pFlyCamera->m_forward, glm::vec3(0.0f, 1.0f, 0.0f))) * sideOffset;
 
                 // Set pTppCamera position relative to the character with an additional side offset
-                pTppCamera->m_position = pFlyCamera->m_position 
-                                        - followDistance * pFlyCamera->m_forward 
-                                        + glm::vec3(0.0f, heightOffset, 0.0f)
-                                        + rightOffset;
+                pTppCamera->m_position = pFlyCamera->m_position - followDistance * pFlyCamera->m_forward + glm::vec3(0.0f, heightOffset, 0.0f) + rightOffset;
 
                 // Set the forward direction of the camera to look at the character's position
                 pTppCamera->m_forward = pFlyCamera->m_forward;
@@ -547,23 +627,26 @@ public:
 
             renderScene(m_defaultShader);
 
-            // render quad
-            renderMinimapTexture();
-            renderMinimap();
-
+            // // render quad
+            if (showMinimap)
+            {
+                renderMinimapTexture();
+                renderMinimap();
+            }
             // draw the debug lights
             m_lightManager.drawLights(m_lightShader, m_projectionMatrix * m_viewMatrix * m_modelMatrix);
 
             renderSkybox();
-            
+
             // Processes input and swaps the window buffer
             m_window.swapBuffers();
         }
     }
 
-    void imGui() {
+    void imGui()
+    {
         // Use ImGui for easy input/output of ints, floats, strings, etc...
-        ImGuiIO& io = ImGui::GetIO();
+        ImGuiIO &io = ImGui::GetIO();
         ImGui::Begin("Window");
         ImGui::Checkbox("Use material if no texture", &m_useMaterial);
         ImGui::Text("Camera Mode");
@@ -605,7 +688,8 @@ public:
         }
 
         ImGui::Separator();
-        if(ImGui::CollapsingHeader("Minimap")){
+        if (ImGui::CollapsingHeader("Minimap"))
+        {
             ImGui::DragFloat("Ortho Height", &minimap_ortho_height, 0.1f, 1.0f, 80.0f, "%.1f");
             if (ImGui::CollapsingHeader("Minimap Position"))
             {
@@ -616,53 +700,73 @@ public:
             }
         }
 
-
-        if(ImGui::CollapsingHeader("Lights")){
+        if (ImGui::CollapsingHeader("Lights"))
+        {
             // Display lights in scene
             std::vector<std::string> itemStrings = {};
-            for (size_t i = 0; i < m_lightManager.m_lights.size(); i++) {
+            for (size_t i = 0; i < m_lightManager.m_lights.size(); i++)
+            {
                 auto string = "Light " + std::to_string(i) + m_lightManager.m_lights[i].toString();
                 itemStrings.push_back(string);
             }
 
-            std::vector<const char*> itemCStrings = {};
-            for (const auto& string : itemStrings) {
+            std::vector<const char *> itemCStrings = {};
+            for (const auto &string : itemStrings)
+            {
                 itemCStrings.push_back(string.c_str());
             }
 
             int tempSelectedItem = static_cast<int>(m_lightManager.m_selectedLightIndex);
-            if (ImGui::ListBox("Lights", &tempSelectedItem, itemCStrings.data(), (int)itemCStrings.size(), 4)) {
+            if (ImGui::ListBox("Lights", &tempSelectedItem, itemCStrings.data(), (int)itemCStrings.size(), 4))
+            {
                 m_lightManager.m_selectedLightIndex = static_cast<size_t>(tempSelectedItem);
             }
 
-            if (ImGui::Button("Add Light")) {
-                m_lightManager.m_lights.emplace_back( &m_window, glm::vec4(0, 0, 3, 0.f), glm::vec4(1) );
+            if (ImGui::Button("Add Light"))
+            {
+                m_lightManager.m_lights.emplace_back(&m_window, glm::vec4(0, 0, 3, 0.f), glm::vec4(1));
                 m_lightManager.m_selectedLightIndex = m_lightManager.m_lights.size() - 1;
             }
 
             ImGui::SameLine();
-            if (ImGui::Button("Remove Light")) {
-                if (m_lightManager.m_lights.size() > 1) {
+            if (ImGui::Button("Remove Light"))
+            {
+                if (m_lightManager.m_lights.size() > 1)
+                {
                     m_lightManager.m_lights.erase(m_lightManager.m_lights.begin() + m_lightManager.m_selectedLightIndex);
                     m_lightManager.m_selectedLightIndex = 0;
                 }
             }
 
-            //Slider for selected camera pos
+            // Slider for selected camera pos
             ImGui::DragFloat4("Position", glm::value_ptr(m_lightManager.crtLight().m_camera.m_position), 0.1f, -10.0f, 10.0f);
 
-            //Color picker for selected light
+            // Color picker for selected light
             ImGui::ColorEdit4("Color", &m_lightManager.crtLight().m_color[0]);
         }
         ImGui::End();
     }
-    
+
     // In here you can handle key presses
     // key - Integer that corresponds to numbers in https://www.glfw.org/docs/latest/group__keys.html
     // mods - Any modifier keys pressed, like shift or control
     void onKeyPressed(int key, int mods)
     {
-        std::cout << "Key pressed: " << key << std::endl;
+        if (key == GLFW_KEY_M)
+        {
+            showMinimap = !showMinimap;
+        }
+        if (key == GLFW_KEY_V)
+        {
+            if (currentCameraMode == CameraMode::FlyCamera)
+            {
+            currentCameraMode = CameraMode::ThirdPersonCamera;
+            }
+            else if (currentCameraMode == CameraMode::ThirdPersonCamera)
+            {
+            currentCameraMode = CameraMode::FlyCamera;
+            }
+        }
     }
 
     // In here you can handle key releases
