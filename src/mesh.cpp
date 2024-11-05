@@ -178,3 +178,7 @@ void GPUMesh::attachToCamera(
     // Translate back by the inverse of the offset to maintain the correct positioning
     // modelMatrix = glm::translate(modelMatrix, -offset);
 }
+
+void GPUMesh::setTexture(Texture* newTex){
+    texture = newTex;
+}

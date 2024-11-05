@@ -23,6 +23,7 @@ DISABLE_WARNINGS_POP()
 #include <iostream>
 #include <vector>
 #include <framework/trackball.h>
+#include <stb/stb_image.h>
 #include <camera.h>
 #include <constants.h>
 
@@ -136,6 +137,11 @@ public:
             lightBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/light_frag.glsl");
             m_lightShader = lightBuilder.build();
 
+            ShaderBuilder skyboxBuilder;
+            skyboxBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/light_vertex.glsl");
+            skyboxBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/light_frag.glsl");
+            m_skyboxShader = skyboxBuilder.build();
+
             // Any new shaders can be added below in similar fashion.
             // ==> Don't forget to reconfigure CMake when you do!
             //     Visual Studio: PROJECT => Generate Cache for ComputerGraphics
@@ -192,18 +198,43 @@ public:
 
         // EXTRA MESHES
 
+        std::vector<GPUMesh> skybox = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/unitCube.obj");
+
+        std::string facesSkybox[6] = {
+            RESOURCE_ROOT "resources/textures/px.png",
+            RESOURCE_ROOT "resources/textures/nx.png",
+            RESOURCE_ROOT "resources/textures/py.png",
+            RESOURCE_ROOT "resources/textures/ny.png",
+            RESOURCE_ROOT "resources/textures/pz.png",
+            RESOURCE_ROOT "resources/textures/nz.png"
+        };
+
+        unsigned int skyboxTex;
+        glGenTextures(1, &skyboxTex);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTex);
+
+        for (unsigned int i = 0; i < 6; i++) {
+            int widthSky, heightSky, nrChannels;
+            unsigned char *data = stbi_load(facesSkybox[i].c_str(), &widthSky, &heightSky, &nrChannels, 0);
+            if (data) {
+                glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB, widthSky, heightSky, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+                stbi_image_free(data);
+            } else {
+                std::cout << "Cubemap texture failed to load at path: " << facesSkybox[i] << std::endl;
+                stbi_image_free(data);
+            }
+        }
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
         std::vector<GPUMesh> screen = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/screen.obj");
 
         std::vector<GPUMesh> character = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/character.obj");
 
         // Add screen to m_meshes and keep a pointer to the added value
-        
-        
-        m_meshes.emplace_back(std::move(screen[0]));
-        GPUMesh* screenMesh = &m_meshes.back();
-
-        screenMesh->translate(glm::vec3(5.0f, 5.0f, 1.0f));
-        screenMesh->rotate(glm::radians(-90.f), glm::vec3(1.f,0.f,0.f));
         Texture screenTexture(RESOURCE_ROOT "resources/textures/doggos.jpg");
 
         // screenMesh->texture = &screenTexture;
@@ -214,6 +245,18 @@ public:
         characterMesh->renderFPV = false;
 
         // RENDER FUNCTIONS *********************************************************************************************
+        auto renderSkybox = [&] {
+            glDepthFunc(GL_LEQUAL);
+            m_skyboxShader.bind();
+            glm::mat4 view = glm::mat4(glm::mat3(m_viewMatrix)); // Remove translation from the view matrix
+            glm::mat4 projection = m_projectionMatrix;
+            glUniformMatrix4fv(m_skyboxShader.getUniformLocation("view"), 1, GL_FALSE, glm::value_ptr(view));
+            glUniformMatrix4fv(m_skyboxShader.getUniformLocation("projection"), 1, GL_FALSE, glm::value_ptr(projection));
+
+            skybox[0].draw(m_skyboxShader);
+            glDepthFunc(GL_LESS);
+        };
+
         auto renderMinimapTexture = [&]
         {
             glEnable(GL_DEPTH_TEST);
@@ -510,6 +553,8 @@ public:
 
             // draw the debug lights
             m_lightManager.drawLights(m_lightShader, m_projectionMatrix * m_viewMatrix * m_modelMatrix);
+
+            renderSkybox();
             
             // Processes input and swaps the window buffer
             m_window.swapBuffers();
@@ -659,6 +704,7 @@ private:
     Shader m_quadShader;
     Shader m_minimapShader;
     Shader m_lightShader;
+    Shader m_skyboxShader;
 
     std::vector<GPUMesh> m_meshes;
     Texture m_texture;

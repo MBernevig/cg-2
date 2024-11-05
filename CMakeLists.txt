@@ -21,6 +21,8 @@ add_executable(Master_TechDemo
 target_include_directories(Master_TechDemo PRIVATE "src/camera")
 target_include_directories(Master_TechDemo PRIVATE "src/utils")
 
+include_directories(${CMAKE_SOURCE_DIR}/framework/third_party/stb)
+
 target_compile_definitions(Master_TechDemo PRIVATE RESOURCE_ROOT="${CMAKE_CURRENT_LIST_DIR}/")
 target_compile_features(Master_TechDemo PRIVATE cxx_std_20)
 target_link_libraries(Master_TechDemo PRIVATE CGFramework)

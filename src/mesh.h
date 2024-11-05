@@ -59,8 +59,10 @@ public:
     glm::mat4 modelMatrix { 1.0f };
     Texture* texture;
 
+    void setTexture(Texture* newTex);
+
     bool renderFPV = true;
-    
+
 private:
     void moveInto(GPUMesh&&);
     void freeGpuMemory();
