@@ -24,6 +24,7 @@ layout(std140) uniform lightBuffer {
 uniform sampler2D shadowMap[10];
 
 uniform sampler2D colorMap;
+uniform sampler2D normalMap;
 uniform bool hasTexCoords;
 uniform bool useMaterial;
 
@@ -32,6 +33,7 @@ uniform vec3 cameraPosition;
 in vec3 fragPosition;
 in vec3 fragNormal;
 in vec2 fragTexCoord;
+in mat3 TBN;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -78,6 +80,8 @@ void main()
     if (hasTexCoords)       { fullColor = vec3(texture(colorMap, fragTexCoord).rgb);}
     else if (useMaterial)   { fullColor = vec3(kd);}
     else                    { fragColor = vec4(normal, 1); return;} // Output color value, change from (1, 0, 0) to something else
+    
+    if (hasTexCoords)       { normal = normalize(TBN * texture(normalMap, fragTexCoord).rgb * 2.0 - 1.0); }
 
     fragColor = vec4(0.f);
 
@@ -88,13 +92,13 @@ void main()
             // don't do anything
         } else {
             // lambert
-            fragColor += lights[i].color * vec4(fullColor * dot(fragNormal, normalize(lights[i].position.xyz - fragPosition)), 1.0);
+            fragColor += lights[i].color * vec4(fullColor * dot(normal, normalize(lights[i].position.xyz - fragPosition)), 1.0);
             // blinn-phong
             vec3 L = normalize(lights[i].position.xyz - fragPosition);
             vec3 V = normalize(cameraPosition - fragPosition);
             vec3 H = normalize(V + L);
-            float LH_dot = dot(fragNormal, H);
-            float NV_dot = dot(fragNormal, V);
+            float LH_dot = dot(normal, H);
+            float NV_dot = dot(normal, V);
             fragColor += LH_dot < 0 || NV_dot < 0 ? vec4(0.0) : lights[i].color * vec4(ks * pow(LH_dot, shininess), 1.0);
         }
     }

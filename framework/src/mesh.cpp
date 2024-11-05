@@ -99,7 +99,9 @@ std::vector<Mesh> loadMesh(const std::filesystem::path& file, bool centerAndNorm
                     Vertex vertex {
                         .position = construct_vec3(&inAttrib.vertices[3 * tinyObjIndex.vertex_index]),
                         .normal = glm::vec3(0),
-                        .texCoord = glm::vec2(0)
+                        .texCoord = glm::vec2(0),
+                        .tangent = glm::vec3(0),
+                        .bitangent = glm::vec3(0)
                     };
                     if (tinyObjIndex.normal_index != -1 && !inAttrib.normals.empty())
                         vertex.normal = glm::vec3(inAttrib.normals[3 * tinyObjIndex.normal_index + 0], inAttrib.normals[3 * tinyObjIndex.normal_index + 1], inAttrib.normals[3 * tinyObjIndex.normal_index + 2]);
@@ -117,7 +119,37 @@ std::vector<Mesh> loadMesh(const std::filesystem::path& file, bool centerAndNorm
                         mesh.vertices.push_back(vertex);
                     }
                 }
+
+                // calculate tangent
+                Vertex& p0 = mesh.vertices[triangle[0]];
+                Vertex& p1 = mesh.vertices[triangle[1]];
+                Vertex& p2 = mesh.vertices[triangle[2]];
+                
+                glm::vec3 dP0 = p1.position - p0.position;
+                glm::vec3 dP1 = p2.position - p0.position;
+                glm::vec2 dTex0 = p1.texCoord - p0.texCoord;
+                glm::vec2 dTex1 = p2.texCoord - p0.texCoord;
+
+                float invD = 1.0 / (dTex0.x * dTex1.y - dTex1.x * dTex0.y);
+
+                glm::vec3 tan = invD * (dTex1.y * dP0 - dTex0.y * dP1);
+
+                p0.tangent += tan;
+                p1.tangent += tan;
+                p2.tangent += tan;
+                
                 mesh.triangles.push_back(triangle);
+            }
+
+            // normalize the tangents
+            for (auto& v : mesh.vertices) {
+                v.tangent = glm::normalize(v.tangent);
+            }
+
+            // TODO: maybe also orthogonalize (now we can also postpone bitangent calculations
+            for (auto &v: mesh.vertices) {
+                v.tangent = v.tangent - v.normal * dot(v.normal, v.tangent);
+                v.bitangent = cross(v.normal, v.tangent);
             }
 
             const auto materialID = shape.mesh.material_ids[startTriangle];
