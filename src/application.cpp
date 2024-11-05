@@ -319,7 +319,7 @@ public:
             // The last row and column affect the translation of the skybox (which we don't want to affect)
             view = glm::mat4(glm::mat3(pFlyCamera->viewMatrix()));
 
-            projection = glm::perspective(glm::radians(45.0f), (float)width / height, 0.1f, 100.0f);
+            projection = m_projectionMatrix;
             glUniformMatrix4fv(m_skyboxShader.getUniformLocation("viewSkybox"), 1, GL_FALSE, glm::value_ptr(view));
             glUniformMatrix4fv(m_skyboxShader.getUniformLocation("projectionSkybox"), 1, GL_FALSE, glm::value_ptr(projection));
 
