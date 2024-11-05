@@ -74,7 +74,8 @@ class Application
 public:
     Application()
     : m_window("Final Project", glm::ivec2(utils::WIDTH, utils::HEIGHT), OpenGLVersion::GL41),
-    m_texture(RESOURCE_ROOT "resources/pattern.png"),
+    m_texture(RESOURCE_ROOT "resources/brickwall.jpg"),
+    m_normalMap(RESOURCE_ROOT "resources/brickwall_normal.jpg"),
     m_lightManager({
         lum::Light(&m_window, glm::vec4(6.f, 3.f, -10.f, -0.f), glm::vec4(1.f, 1.f, 1.f, 0.f))
     }) {
@@ -95,7 +96,7 @@ public:
             else if (action == GLFW_RELEASE)
                 onMouseReleased(button, mods); });
 
-        m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/platform_dragon.obj");
+        m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/scene1.obj");
 
         try
         {
@@ -328,6 +329,9 @@ public:
                     glUniform1i(shader.getUniformLocation("colorMap"), 0);
                     glUniform1i(shader.getUniformLocation("hasTexCoords"), GL_TRUE);
                     glUniform1i(shader.getUniformLocation("useMaterial"), GL_FALSE);
+
+                    m_normalMap.bind(GL_TEXTURE1);
+                    glUniform1i(shader.getUniformLocation("normalMap"), 1);
                 }
                 else
                 {
@@ -337,9 +341,9 @@ public:
                 // bind shadow textures
                 int textureIndices[m_lightManager.m_lights.size()];
                 for (int i = 0; i < m_lightManager.m_lights.size(); i++) {
-                    glActiveTexture(GL_TEXTURE1 + i);
+                    glActiveTexture(GL_TEXTURE2 + i);
                     glBindTexture(GL_TEXTURE_2D, m_lightManager.m_lights[i].m_shadowMap);
-                    textureIndices[i] = i + 1;
+                    textureIndices[i] = i + 2;
                 }
                 glUniform1iv(shader.getUniformLocation("shadowMap"), m_lightManager.m_lights.size(), textureIndices);
 
@@ -556,6 +560,7 @@ private:
 
     std::vector<GPUMesh> m_meshes;
     Texture m_texture;
+    Texture m_normalMap;
     bool m_useMaterial{true};
 
     lum::LightManager m_lightManager;
