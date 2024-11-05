@@ -204,7 +204,7 @@ public:
 
         screenMesh->translate(glm::vec3(5.0f, 5.0f, 1.0f));
         screenMesh->rotate(glm::radians(-90.f), glm::vec3(1.f,0.f,0.f));
-        Texture screenTexture(RESOURCE_ROOT "resources/textures/doggos.jpg");
+        Texture screenTexture(RESOURCE_ROOT "resources/doggos.jpg");
 
         // screenMesh->texture = &screenTexture;
 
