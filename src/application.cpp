@@ -201,13 +201,13 @@ public:
 
             const glm::mat4 m_projection2 = glm::ortho(-orthoWidth, orthoWidth, -minimap_ortho_height, minimap_ortho_height, 0.1f, 100.0f);
 
-            const glm::mat4 mvpMatrix = m_projection2 * pMinimapCamera->viewMatrix() * m_modelMatrix;
-            // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
-            // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
-            const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(m_modelMatrix));
 
             for (GPUMesh &mesh : m_meshes)
             {
+                const glm::mat4 mvpMatrix = m_projection2 * pMinimapCamera->viewMatrix() * mesh.modelMatrix;
+                // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
+                // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
+                const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(mesh.modelMatrix));
                 m_minimapShader.bind();
                 glUniformMatrix4fv(m_minimapShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
                 // Uncomment this line when you use the modelMatrix (or fragmentPosition)
@@ -315,13 +315,13 @@ public:
         auto renderScene = [&](const Shader &shader)
         {
 
-            const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
-            // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
-            // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
-            const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(m_modelMatrix));
 
             for (GPUMesh &mesh : m_meshes)
             {
+                const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * mesh.modelMatrix;
+                // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
+                // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
+                const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(mesh.modelMatrix));
                 shader.bind();
                 //!! IMPORTANT -> mesh.draw binds material to block 0, we bind lightBuffer to 1 instead.
                 shader.bindUniformBlock("lightBuffer", 1, m_lightManager.m_UBO);
@@ -423,7 +423,7 @@ public:
             glm::vec3 interim = pFlyCamera->m_forward;
             pMinimapCamera->m_up = glm::vec3(interim.x, 0.f, interim.z);
 
-
+            
             if(currentCameraMode == CameraMode::ThirdPersonCamera){
                 // Calculate a rightward direction from the character's forward vector
                 glm::vec3 rightOffset = glm::normalize(glm::cross(pFlyCamera->m_forward, glm::vec3(0.0f, 1.0f, 0.0f))) * sideOffset;
@@ -452,13 +452,13 @@ public:
             glEnable(GL_DEPTH_TEST);
             glEnable(GL_BLEND);
 
-            renderMinimapTexture();
 
             m_lightManager.drawShadowMaps(m_shadowShader, m_modelMatrix, m_projectionMatrix, m_meshes);
 
             renderScene(m_defaultShader);
 
             // render quad
+            renderMinimapTexture();
             renderMinimap();
 
             // draw the debug lights
