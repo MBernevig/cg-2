@@ -359,32 +359,48 @@ public:
                 // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
                 // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
                 const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(mesh.modelMatrix));
-                m_minimapShader.bind();
-                glUniformMatrix4fv(m_minimapShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
+                m_defaultShader.bind();
+                //!! IMPORTANT -> mesh.draw binds material to block 0, we bind lightBuffer to 1 instead.
+                m_defaultShader.bindUniformBlock("lightBuffer", 1, m_lightManager.m_UBO);
+                glUniform3fv(m_defaultShader.getUniformLocation("cameraPosition"), 1, glm::value_ptr(pFlyCamera->cameraPos()));
+                glUniformMatrix4fv(m_defaultShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
+                glUniformMatrix4fv(m_defaultShader.getUniformLocation("meshModelMatrix"), 1, GL_FALSE, glm::value_ptr(mesh.modelMatrix));
                 // Uncomment this line when you use the modelMatrix (or fragmentPosition)
                 // glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
-                glUniformMatrix3fv(m_minimapShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
-
+                glUniformMatrix3fv(m_defaultShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
                 if (mesh.hasTextureCoords() && mesh.texture != nullptr)
                 {
                     mesh.texture->bind(GL_TEXTURE0);
-                    glUniform1i(m_minimapShader.getUniformLocation("colorMap"), 0);
-                    glUniform1i(m_minimapShader.getUniformLocation("hasTexCoords"), GL_TRUE);
-                    glUniform1i(m_minimapShader.getUniformLocation("useMaterial"), GL_FALSE);
+                    glUniform1i(m_defaultShader.getUniformLocation("colorMap"), 0);
+                    glUniform1i(m_defaultShader.getUniformLocation("hasTexCoords"), GL_TRUE);
+                    glUniform1i(m_defaultShader.getUniformLocation("useMaterial"), GL_FALSE);
+
+                    m_normalMap.bind(GL_TEXTURE1);
+                    glUniform1i(m_defaultShader.getUniformLocation("normalMap"), 1);
                 }
                 else
                 {
-                    glUniform1i(m_minimapShader.getUniformLocation("hasTexCoords"), GL_FALSE);
-                    glUniform1i(m_minimapShader.getUniformLocation("useMaterial"), m_useMaterial);
+                    glUniform1i(m_defaultShader.getUniformLocation("hasTexCoords"), GL_FALSE);
+                    glUniform1i(m_defaultShader.getUniformLocation("useMaterial"), m_useMaterial);
                 }
-                mesh.draw(m_minimapShader);
+                // bind shadow textures
+                int textureIndices[32];
+                for (int i = 0; i < m_lightManager.m_lights.size(); i++)
+                {
+                    glActiveTexture(GL_TEXTURE2 + i);
+                    glBindTexture(GL_TEXTURE_2D, m_lightManager.m_lights[i].m_shadowMap);
+                    textureIndices[i] = i + 2;
+                }
+                glUniform1iv(m_defaultShader.getUniformLocation("shadowMap"), m_lightManager.m_lights.size(), textureIndices);
+
+                mesh.draw(m_defaultShader);
             }
 
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
         };
         auto renderMinimap = [&]
         {
-            glDisable(GL_DEPTH_TEST);
+            // glDisable(GL_DEPTH_TEST);
             m_quadShader.bind();
             glActiveTexture(GL_TEXTURE2);
             glBindTexture(GL_TEXTURE_2D, minimapTex);

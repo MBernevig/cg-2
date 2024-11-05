@@ -10,7 +10,10 @@ uniform mat4 mvpMatrix;
 void main()
 {
     // Transform the vertex position using model, view, and projection matrices
-    gl_Position = mvpMatrix * vec4(aPos, 1);
+    vec4 transformedPos = mvpMatrix * vec4(aPos, 1);
+    
+    // Set the depth to always be at 0
+    gl_Position = vec4(transformedPos.xy, 0.0, transformedPos.w);
     
     // Pass the texture coordinates to the fragment shader
     TexCoord = aTexCoord;
