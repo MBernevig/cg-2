@@ -14,6 +14,8 @@ struct Light {
     mat4 lightMVP;
 };
 
+uniform mat4 meshModelMatrix;
+
 layout(std140) uniform lightBuffer {
     int light_count;
     Light lights[32];
@@ -35,7 +37,7 @@ layout(location = 0) out vec4 fragColor;
 
 vec3 get_frag_light_coord(int lightIndex)
 {
-    vec4 fragLightCoord = lights[lightIndex].lightMVP * vec4(fragPosition,1.f);
+    vec4 fragLightCoord = lights[lightIndex].lightMVP * meshModelMatrix * vec4(fragPosition,1.f);
 
     // Divide by w because fragLightCoord are homogeneous coordinates
     fragLightCoord.xyz /= fragLightCoord.w;

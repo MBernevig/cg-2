@@ -51,7 +51,8 @@ void Light::drawShadowMap(const Shader &shadowShader, const glm::mat4 &mvpMatrix
 
     for (auto &mesh: meshes) {
         shadowShader.bind();
-        glUniformMatrix4fv(shadowShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(m_mvp));
+        glm::mat4 mvp = mvpMatrix * mesh.modelMatrix;
+        glUniformMatrix4fv(shadowShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvp));
         mesh.draw(shadowShader);
     }
 }

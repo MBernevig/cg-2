@@ -327,6 +327,7 @@ public:
                 shader.bindUniformBlock("lightBuffer", 1, m_lightManager.m_UBO);
                 glUniform3fv(shader.getUniformLocation("cameraPosition"), 1, glm::value_ptr(pFlyCamera->cameraPos()));
                 glUniformMatrix4fv(shader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
+                glUniformMatrix4fv(shader.getUniformLocation("meshModelMatrix"),1,GL_FALSE, glm::value_ptr(mesh.modelMatrix));
                 // Uncomment this line when you use the modelMatrix (or fragmentPosition)
                 // glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
                 glUniformMatrix3fv(shader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
@@ -463,6 +464,7 @@ public:
 
             // draw the debug lights
             m_lightManager.drawLights(m_lightShader, m_projectionMatrix * m_viewMatrix * m_modelMatrix);
+
             
             // Processes input and swaps the window buffer
             m_window.swapBuffers();
