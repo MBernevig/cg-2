@@ -21,7 +21,7 @@ void main()
 {
     gl_Position = mvpMatrix * vec4(position, 1);
     
-    fragPosition    = position;
+    fragPosition    = vec3(modelMatrix* vec4(position,1));
     fragNormal      = normalModelMatrix * normal;
     fragTexCoord    = texCoord;
     

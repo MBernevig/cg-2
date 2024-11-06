@@ -64,6 +64,13 @@ const float fixedTimeStep = 0.016f; // 60 ticks per sec
 float frameTimeAccumulator = 0.0f;  // use this to add up skipped timesteps
 
 bool showMinimap = true;
+bool renderMainScene = true;
+bool drawCube = true;
+bool reflectMode = true;
+float refractionIndex = 1.0f;
+float cubeRotation = 0.5f;
+int shadowMode = 1;
+int pcfSampleCount = 4;
 
 std::unique_ptr<Camera> pFlyCamera;
 std::unique_ptr<Camera> pMinimapCamera;
@@ -142,7 +149,7 @@ public:
             else if (action == GLFW_RELEASE)
                 onMouseReleased(button, mods); });
 
-        m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/scene1.obj");
+        m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/scene2.obj");
 
         try
         {
@@ -175,6 +182,11 @@ public:
             skyboxBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/skybox_vert.glsl");
             skyboxBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/skybox_frag.glsl");
             m_skyboxShader = skyboxBuilder.build();
+
+            ShaderBuilder cubeBuilder;
+            cubeBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/cube_vert.glsl");
+            cubeBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/cube_frag.glsl");
+            m_cubeShader = cubeBuilder.build();
 
             // Any new shaders can be added below in similar fashion.
             // ==> Don't forget to reconfigure CMake when you do!
@@ -230,7 +242,7 @@ public:
 
         // EXTRA MESHES
 
-        std::vector<GPUMesh> skybox = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/unitCube.obj");
+        std::vector<GPUMesh> cube = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/unitCube.obj");
 
         std::string facesSkybox[6] = {
             RESOURCE_ROOT "resources/textures/px.png",
@@ -419,6 +431,8 @@ public:
                     textureIndices[i] = i + 2;
                 }
                 glUniform1iv(m_defaultShader.getUniformLocation("shadowMap"), m_lightManager.m_lights.size(), textureIndices);
+                glUniform1i(m_defaultShader.getUniformLocation("shadowMode"), shadowMode);
+                glUniform1i(m_defaultShader.getUniformLocation("sampleCount"), pcfSampleCount);
 
                 mesh.draw(m_defaultShader);
             }
@@ -554,6 +568,7 @@ public:
                 }
                 glUniform1iv(shader.getUniformLocation("shadowMap"), m_lightManager.m_lights.size(), textureIndices);
                 glUniform1i(shader.getUniformLocation("shadowMode"), shadowMode);
+                glUniform1i(shader.getUniformLocation("sampleCount"), pcfSampleCount);
 
                 mesh.draw(shader);
             }
@@ -779,6 +794,7 @@ public:
             ImGui::SameLine();
             ImGui::RadioButton("PCF Shadows", &shadowMode, 2);
             ImGui::Text("0: No shadows, 1: Hard shadows, 2: PCF shadows");
+            ImGui::DragInt("PCF Sample Count", &pcfSampleCount, 1, 1, 64);
         }
 
         if (ImGui::CollapsingHeader("Lights"))
