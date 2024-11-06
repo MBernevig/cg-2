@@ -23,6 +23,8 @@ layout(std140) uniform lightBuffer {
 
 uniform sampler2D shadowMap[10];
 
+uniform samplerCube skybox;
+
 uniform sampler2D colorMap;
 uniform sampler2D normalMap;
 uniform bool hasTexCoords;
@@ -104,7 +106,11 @@ void main()
             vec3 H = normalize(V + L);
             float LH_dot = dot(normal, H);
             float NV_dot = dot(normal, V);
-            fragColor += LH_dot < 0 || NV_dot < 0 ? vec4(0.0) : lights[i].color * vec4(ks * pow(LH_dot, shininess), 1.0);
+
+            vec3 I = normalize(fragPosition - cameraPosition);
+            vec3 R = reflect(I, normalize(normal));
+            
+            fragColor += LH_dot < 0 || NV_dot < 0 ? vec4(0.0) : lights[i].color * vec4(ks * pow(LH_dot, shininess), 1.0) * vec4(texture(skybox, R).rgb, 1.0);
         }
     }
     fragColor /= light_count; // blending
