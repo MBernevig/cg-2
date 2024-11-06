@@ -281,7 +281,7 @@ public:
         // Add screen to m_meshes and keep a pointer to the added value
         Texture screenTexture(RESOURCE_ROOT "resources/textures/doggos.jpg");
 
-        screen[0].texture = &screenTexture;
+        // screen[0].texture = &screenTexture;
         // screenMesh->texture = &screenTexture;
 
         m_meshes.emplace_back(std::move(character[0]));

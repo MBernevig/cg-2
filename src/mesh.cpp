@@ -29,6 +29,10 @@ GPUMesh::GPUMesh(const Mesh& cpuMesh)
 
     // Figure out if this mesh has texture coordinates
     m_hasTextureCoords = static_cast<bool>(cpuMesh.material.kdTexture);
+
+    if (cpuMesh.material.kdTexture != nullptr) {
+        texture = std::make_shared<Texture>(cpuMesh.material.kdTexture);
+    }
     
     if (cpuMesh.material.normalTexture != nullptr) {
         normalMap = std::make_shared<Texture>(cpuMesh.material.normalTexture);
@@ -185,8 +189,4 @@ void GPUMesh::attachToCamera(
 
     // Translate back by the inverse of the offset to maintain the correct positioning
     // modelMatrix = glm::translate(modelMatrix, -offset);
-}
-
-void GPUMesh::setTexture(Texture* newTex){
-    texture = newTex;
 }

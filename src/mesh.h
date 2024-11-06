@@ -57,7 +57,7 @@ public:
         const glm::vec3 &offset = glm::vec3(0.0f));
 
     glm::mat4 modelMatrix { 1.0f };
-    Texture* texture = nullptr;
+    std::shared_ptr<Texture> texture = nullptr;
     std::shared_ptr<Texture> normalMap = nullptr;
 
     void setTexture(Texture* newTex);
