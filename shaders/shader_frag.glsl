@@ -81,7 +81,11 @@ void main()
     else if (useMaterial)   { fullColor = vec3(kd);}
     else                    { fragColor = vec4(normal, 1); return;} // Output color value, change from (1, 0, 0) to something else
     
-    if (hasTexCoords)       { normal = normalize(TBN * texture(normalMap, fragTexCoord).rgb * 2.0 - 1.0); }
+    if (hasTexCoords)       {
+        vec3 texNormal = texture(normalMap, fragTexCoord).rgb * 2.0 - 1.0;
+        texNormal.y = -texNormal.y; // 💀
+        normal = normalize(TBN * texNormal); 
+    }
 
     fragColor = vec4(0.f);
 
