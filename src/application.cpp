@@ -286,7 +286,6 @@ public:
 
         m_meshes.emplace_back(std::move(character[0]));
         GPUMesh *characterMesh = &m_meshes.back();
-        characterMesh->texture = &screenTexture;
         characterMesh->renderFPV = false;
 
         // Create VAO, VBO, and EBO for the skybox
