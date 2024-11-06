@@ -367,6 +367,10 @@ public:
                 // Uncomment this line when you use the modelMatrix (or fragmentPosition)
                 // glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
                 glUniformMatrix3fv(m_defaultShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
+
+                glActiveTexture(GL_TEXTURE4);
+                glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTex);
+                glUniform1i(m_defaultShader.getUniformLocation("skybox"), 4);
                 if (mesh.hasTextureCoords())
                 {
                     if(mesh.texture) mesh.texture->bind(GL_TEXTURE0); else m_texture.bind(GL_TEXTURE0);
