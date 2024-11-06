@@ -13,8 +13,8 @@ GPUMaterial::GPUMaterial(const Material& material) :
     kd(material.kd),
     ks(material.ks),
     shininess(material.shininess),
-    transparency(material.transparency)
-{}
+    transparency(material.transparency) {
+}
 
 GPUMesh::GPUMesh(const Mesh& cpuMesh)
 {
@@ -29,6 +29,10 @@ GPUMesh::GPUMesh(const Mesh& cpuMesh)
 
     // Figure out if this mesh has texture coordinates
     m_hasTextureCoords = static_cast<bool>(cpuMesh.material.kdTexture);
+    
+    if (cpuMesh.material.normalTexture != nullptr) {
+        normalMap = std::make_shared<Texture>(cpuMesh.material.normalTexture);
+    }
 
     // Create VAO and bind it so subsequent creations of VBO and IBO are bound to this VAO
     glGenVertexArrays(1, &m_vao);

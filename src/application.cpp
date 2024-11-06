@@ -367,6 +367,7 @@ public:
                 // Uncomment this line when you use the modelMatrix (or fragmentPosition)
                 // glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
                 glUniformMatrix3fv(m_defaultShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
+                glUniform1i(m_defaultShader.getUniformLocation("useNormalMap"), mesh.normalMap != nullptr);
                 if (mesh.hasTextureCoords())
                 {
                     if(mesh.texture) mesh.texture->bind(GL_TEXTURE0); else m_texture.bind(GL_TEXTURE0);
@@ -374,8 +375,10 @@ public:
                     glUniform1i(m_defaultShader.getUniformLocation("hasTexCoords"), GL_TRUE);
                     glUniform1i(m_defaultShader.getUniformLocation("useMaterial"), GL_FALSE);
 
-                    m_normalMap.bind(GL_TEXTURE1);
-                    glUniform1i(m_defaultShader.getUniformLocation("normalMap"), 1);
+                    if (mesh.normalMap != nullptr) {
+                        mesh.normalMap->bind(GL_TEXTURE1);
+                        glUniform1i(m_defaultShader.getUniformLocation("normalMap"), 1);
+                    }
                 }
                 else
                 {
@@ -498,6 +501,7 @@ public:
                 // Uncomment this line when you use the modelMatrix (or fragmentPosition)
                 // glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
                 glUniformMatrix3fv(shader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
+                glUniform1i(shader.getUniformLocation("useNormalMap"), mesh.normalMap != nullptr);
                 if (mesh.hasTextureCoords())
                 {
                     if(mesh.texture) mesh.texture->bind(GL_TEXTURE0); else m_texture.bind(GL_TEXTURE0);
@@ -505,8 +509,10 @@ public:
                     glUniform1i(shader.getUniformLocation("hasTexCoords"), GL_TRUE);
                     glUniform1i(shader.getUniformLocation("useMaterial"), GL_FALSE);
 
-                    m_normalMap.bind(GL_TEXTURE1);
-                    glUniform1i(shader.getUniformLocation("normalMap"), 1);
+                    if (mesh.normalMap != nullptr) {
+                        mesh.normalMap->bind(GL_TEXTURE1);
+                        glUniform1i(shader.getUniformLocation("normalMap"), 1);
+                    }
                 }
                 else
                 {
@@ -580,7 +586,7 @@ public:
             {
                 m_viewMatrix = pFlyCamera->viewMatrix();
                 // TODO: This should be changed to an actual function in camera.cpp
-                m_projectionMatrix = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 100.0f);
+                m_projectionMatrix = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 200.0f);
                 break;
             }
 
@@ -599,14 +605,14 @@ public:
             {
                 m_viewMatrix = pTppCamera->viewMatrix();
                 // TODO: This should be changed to an actual function in camera.cpp
-                m_projectionMatrix = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 100.0f);
+                m_projectionMatrix = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 200.0f);
                 break;
             }
 
             case CameraMode::LightCamera:
             {
                 m_viewMatrix = m_lightManager.crtLight().m_camera.viewMatrix();
-                m_projectionMatrix = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 100.0f);
+                m_projectionMatrix = glm::perspective(utils::FOV, m_window.getAspectRatio(), 0.1f, 200.0f);
                 break;
             }
             }

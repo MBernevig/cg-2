@@ -166,6 +166,9 @@ std::vector<Mesh> loadMesh(const std::filesystem::path& file, bool centerAndNorm
                 mesh.material.ks = construct_vec3(objMaterial.specular);
                 mesh.material.shininess = objMaterial.shininess;
                 mesh.material.transparency = objMaterial.dissolve;
+                if (!objMaterial.bump_texname.empty()) { // load normal map
+                    mesh.material.normalTexture = std::make_shared<Image>(baseDir / objMaterial.bump_texname);
+                }
             }
 
             out.push_back(std::move(mesh));

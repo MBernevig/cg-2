@@ -58,6 +58,7 @@ public:
 
     glm::mat4 modelMatrix { 1.0f };
     Texture* texture = nullptr;
+    std::shared_ptr<Texture> normalMap = nullptr;
 
     void setTexture(Texture* newTex);
 

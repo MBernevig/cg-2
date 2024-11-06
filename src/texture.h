@@ -1,5 +1,6 @@
 #pragma once
 #include <framework/disable_all_warnings.h>
+#include <framework/image.h>
 DISABLE_WARNINGS_PUSH()
 #include <glm/vec3.hpp>
 DISABLE_WARNINGS_POP()
@@ -14,6 +15,7 @@ struct ImageLoadingException : public std::runtime_error {
 class Texture {
 public:
     Texture(std::filesystem::path filePath);
+    Texture(std::shared_ptr<Image> cpuTexture);
     Texture(const Texture&) = delete;
     Texture(Texture&&);
     ~Texture();
