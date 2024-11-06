@@ -305,6 +305,29 @@ public:
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
         // RENDER FUNCTIONS *********************************************************************************************
+        auto renderCube = [&] {
+            m_cubeShader.bind();
+            const glm::mat4 mvpMatrix = m_projectionMatrix * pFlyCamera->viewMatrix() * cube[0].modelMatrix;
+                // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
+                // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
+            const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(cube[0].modelMatrix));
+
+            glUniform3fv(m_cubeShader.getUniformLocation("cameraPosition"), 1, glm::value_ptr(pFlyCamera->cameraPos()));
+            glUniformMatrix4fv(m_cubeShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
+            glUniformMatrix4fv(m_cubeShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(cube[0].modelMatrix));
+            glUniformMatrix3fv(m_cubeShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
+
+            glActiveTexture(GL_TEXTURE4);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTex);
+            glUniform1i(m_cubeShader.getUniformLocation("skybox"), 4);
+
+            glUniform1i(m_cubeShader.getUniformLocation("reflectMode"), (reflectMode? 1 : 0));
+            glUniform1f(m_cubeShader.getUniformLocation("refractionIndex"), refractionIndex);
+
+            cube[0].draw(m_cubeShader);
+
+        };
+
         auto renderSkybox = [&]
         {
             glEnable(GL_DEPTH_TEST);
@@ -363,9 +386,7 @@ public:
                 m_defaultShader.bindUniformBlock("lightBuffer", 1, m_lightManager.m_UBO);
                 glUniform3fv(m_defaultShader.getUniformLocation("cameraPosition"), 1, glm::value_ptr(pFlyCamera->cameraPos()));
                 glUniformMatrix4fv(m_defaultShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
-                glUniformMatrix4fv(m_defaultShader.getUniformLocation("meshModelMatrix"), 1, GL_FALSE, glm::value_ptr(mesh.modelMatrix));
-                // Uncomment this line when you use the modelMatrix (or fragmentPosition)
-                // glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
+                glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(mesh.modelMatrix));
                 glUniformMatrix3fv(m_defaultShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
                 glUniform1i(m_defaultShader.getUniformLocation("useNormalMap"), mesh.normalMap != nullptr);
 
@@ -503,7 +524,7 @@ public:
                 glUniformMatrix4fv(shader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
                 glUniformMatrix4fv(shader.getUniformLocation("meshModelMatrix"), 1, GL_FALSE, glm::value_ptr(mesh.modelMatrix));
                 // Uncomment this line when you use the modelMatrix (or fragmentPosition)
-                // glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
+                glUniformMatrix4fv(shader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(mesh.modelMatrix));
                 glUniformMatrix3fv(shader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
                 glUniform1i(shader.getUniformLocation("useNormalMap"), mesh.normalMap != nullptr);
                 if (mesh.hasTextureCoords())
@@ -532,6 +553,7 @@ public:
                     textureIndices[i] = i + 2;
                 }
                 glUniform1iv(shader.getUniformLocation("shadowMap"), m_lightManager.m_lights.size(), textureIndices);
+                glUniform1i(shader.getUniformLocation("shadowMode"), shadowMode);
 
                 mesh.draw(shader);
             }
@@ -558,6 +580,7 @@ public:
             {
 
                 tickCounter++;
+                cube[0].rotate(glm::radians(cubeRotation), glm::vec3(0,1,0));
                 frameTimeAccumulator -= fixedTimeStep;
             }
             switch (currentCameraMode)
@@ -655,7 +678,7 @@ public:
 
             m_lightManager.drawShadowMaps(m_shadowShader, m_modelMatrix, m_projectionMatrix, m_meshes);
 
-            renderScene(m_defaultShader);
+            if(renderMainScene) renderScene(m_defaultShader);
 
             // // render quad
             if (showMinimap)
@@ -667,6 +690,11 @@ public:
             m_lightManager.drawLights(m_lightShader, m_projectionMatrix * m_viewMatrix * m_modelMatrix);
 
             renderSkybox();
+
+            if(drawCube)
+            {
+                renderCube();
+            }
 
             // Processes input and swaps the window buffer
             m_window.swapBuffers();
@@ -728,6 +756,29 @@ public:
                 ImGui::DragFloat3("Quad Third", glm::value_ptr(quad_third), 0.01f, -1.0f, 1.8f, "%.2f");
                 ImGui::DragFloat3("Quad Fourth", glm::value_ptr(quad_fourth), 0.01f, -1.0f, 1.8f, "%.2f");
             }
+        }
+
+        if (ImGui::CollapsingHeader("Scene Controls"))
+        {
+            ImGui::Checkbox("Show Minimap", &showMinimap);
+            ImGui::Checkbox("Render Main Scene", &renderMainScene);
+            ImGui::Checkbox("Draw Cube", &drawCube);
+            if(drawCube){
+                if (ImGui::CollapsingHeader("Cube Settings"))
+                {
+                    ImGui::Checkbox("Reflect Mode", &reflectMode);
+                    ImGui::DragFloat("Refraction Index", &refractionIndex, 0.01f, 0.0f, 2.0f, "%.2f");
+                    ImGui::DragFloat("Cube Rotation", &cubeRotation, 0.1f, 0.0f, 10.0f, "%.1f");
+                }
+            }
+
+            ImGui::Text("Shadow Mode");
+            ImGui::RadioButton("No Shadows", &shadowMode, 0);
+            ImGui::SameLine();
+            ImGui::RadioButton("Hard Shadows", &shadowMode, 1);
+            ImGui::SameLine();
+            ImGui::RadioButton("PCF Shadows", &shadowMode, 2);
+            ImGui::Text("0: No shadows, 1: Hard shadows, 2: PCF shadows");
         }
 
         if (ImGui::CollapsingHeader("Lights"))
@@ -797,6 +848,16 @@ public:
             currentCameraMode = CameraMode::FlyCamera;
             }
         }
+
+        if (key == GLFW_KEY_1) {
+            currentCameraMode = CameraMode::FlyCamera;
+        } else if (key == GLFW_KEY_2) {
+            currentCameraMode = CameraMode::ThirdPersonCamera;
+        } else if (key == GLFW_KEY_3) {
+            currentCameraMode = CameraMode::MinimapCamera;
+        } else if (key == GLFW_KEY_4) {
+            currentCameraMode = CameraMode::LightCamera;
+        }
     }
 
     // In here you can handle key releases
@@ -839,6 +900,7 @@ private:
     Shader m_minimapShader;
     Shader m_lightShader;
     Shader m_skyboxShader;
+    Shader m_cubeShader;
 
     std::vector<GPUMesh> m_meshes;
     Texture m_texture;
