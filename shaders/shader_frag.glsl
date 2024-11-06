@@ -151,6 +151,6 @@ void main()
         fragColor += LH_dot < 0 || NV_dot < 0 ? vec4(0.0) : shadowFactor * lights[i].color * vec4(ks * pow(LH_dot, shininess), 1.0) * vec4(texture(skybox, R).rgb, 1.0);
         
     }
-    fragColor /= light_count; // blending
+    // fragColor /= light_count; // blending
     fragColor.a = 1.0; // Set alpha to 1.0
 }

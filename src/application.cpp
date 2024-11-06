@@ -329,9 +329,9 @@ public:
             glUniformMatrix4fv(m_cubeShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(cube[0].modelMatrix));
             glUniformMatrix3fv(m_cubeShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
 
-            glActiveTexture(GL_TEXTURE4);
+            glActiveTexture(GL_TEXTURE2);
             glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTex);
-            glUniform1i(m_cubeShader.getUniformLocation("skybox"), 4);
+            glUniform1i(m_cubeShader.getUniformLocation("skybox"), 2);
 
             glUniform1i(m_cubeShader.getUniformLocation("reflectMode"), (reflectMode? 1 : 0));
             glUniform1f(m_cubeShader.getUniformLocation("refractionIndex"), refractionIndex);
@@ -361,9 +361,9 @@ public:
             // where an object is present (a depth of 1.0f will always fail against any object's depth value)
             // glDepthMask(GL_FALSE);
             glBindVertexArray(skyboxVAO);
-            glActiveTexture(GL_TEXTURE4);
+            glActiveTexture(GL_TEXTURE2);
             glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTex);
-            glUniform1i(m_skyboxShader.getUniformLocation("skybox"), 4);
+            glUniform1i(m_skyboxShader.getUniformLocation("skybox"), 2);
             glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
             glBindVertexArray(0);
             // glDepthMask(GL_TRUE);
@@ -402,9 +402,9 @@ public:
                 glUniformMatrix3fv(m_defaultShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
                 glUniform1i(m_defaultShader.getUniformLocation("useNormalMap"), mesh.normalMap != nullptr);
 
-                glActiveTexture(GL_TEXTURE4);
+                glActiveTexture(GL_TEXTURE2);
                 glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTex);
-                glUniform1i(m_defaultShader.getUniformLocation("skybox"), 4);
+                glUniform1i(m_defaultShader.getUniformLocation("skybox"), 2);
                 if (mesh.hasTextureCoords())
                 {
                     if(mesh.texture) mesh.texture->bind(GL_TEXTURE0); else m_texture.bind(GL_TEXTURE0);
@@ -426,9 +426,9 @@ public:
                 int textureIndices[32];
                 for (int i = 0; i < m_lightManager.m_lights.size(); i++)
                 {
-                    glActiveTexture(GL_TEXTURE2 + i);
+                    glActiveTexture(GL_TEXTURE3 + i);
                     glBindTexture(GL_TEXTURE_2D, m_lightManager.m_lights[i].m_shadowMap);
-                    textureIndices[i] = i + 2;
+                    textureIndices[i] = i + 3;
                 }
                 glUniform1iv(m_defaultShader.getUniformLocation("shadowMap"), m_lightManager.m_lights.size(), textureIndices);
                 glUniform1i(m_defaultShader.getUniformLocation("shadowMode"), shadowMode);
@@ -559,12 +559,12 @@ public:
                     glUniform1i(shader.getUniformLocation("useMaterial"), m_useMaterial);
                 }
                 // bind shadow textures
-                int textureIndices[32];
+                int textureIndices[10];
                 for (int i = 0; i < m_lightManager.m_lights.size(); i++)
                 {
-                    glActiveTexture(GL_TEXTURE2 + i);
+                    glActiveTexture(GL_TEXTURE3 + i);
                     glBindTexture(GL_TEXTURE_2D, m_lightManager.m_lights[i].m_shadowMap);
-                    textureIndices[i] = i + 2;
+                    textureIndices[i] = i + 3;
                 }
                 glUniform1iv(shader.getUniformLocation("shadowMap"), m_lightManager.m_lights.size(), textureIndices);
                 glUniform1i(shader.getUniformLocation("shadowMode"), shadowMode);
