@@ -142,7 +142,7 @@ public:
             else if (action == GLFW_RELEASE)
                 onMouseReleased(button, mods); });
 
-        m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/platform_dragon.obj");
+        m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/scene1.obj");
 
         try
         {
@@ -368,9 +368,9 @@ public:
                 // Uncomment this line when you use the modelMatrix (or fragmentPosition)
                 // glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
                 glUniformMatrix3fv(m_defaultShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
-                if (mesh.hasTextureCoords() && mesh.texture != nullptr)
+                if (mesh.hasTextureCoords())
                 {
-                    mesh.texture->bind(GL_TEXTURE0);
+                    if(mesh.texture) mesh.texture->bind(GL_TEXTURE0); else m_texture.bind(GL_TEXTURE0);
                     glUniform1i(m_defaultShader.getUniformLocation("colorMap"), 0);
                     glUniform1i(m_defaultShader.getUniformLocation("hasTexCoords"), GL_TRUE);
                     glUniform1i(m_defaultShader.getUniformLocation("useMaterial"), GL_FALSE);
@@ -499,9 +499,9 @@ public:
                 // Uncomment this line when you use the modelMatrix (or fragmentPosition)
                 // glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
                 glUniformMatrix3fv(shader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
-                if (mesh.hasTextureCoords() && mesh.texture != nullptr)
+                if (mesh.hasTextureCoords())
                 {
-                    mesh.texture->bind(GL_TEXTURE0);
+                    if(mesh.texture) mesh.texture->bind(GL_TEXTURE0); else m_texture.bind(GL_TEXTURE0);
                     glUniform1i(shader.getUniformLocation("colorMap"), 0);
                     glUniform1i(shader.getUniformLocation("hasTexCoords"), GL_TRUE);
                     glUniform1i(shader.getUniformLocation("useMaterial"), GL_FALSE);
