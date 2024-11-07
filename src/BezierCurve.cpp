@@ -53,6 +53,7 @@ void BezierCurve::drawCurve(const Shader& bezierShader, glm::mat4 mvp) {
 }
 
 void BezierCurve::updateCurvePoints() {
+    m_curvePoints.clear();
     glBindVertexArray(m_VAO);
     glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
 

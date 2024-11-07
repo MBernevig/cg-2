@@ -10,7 +10,6 @@ public:
     void drawCurve(const Shader &bezierShader, glm::mat4 mvp);
     void updateCurvePoints();
 
-private:
     glm::vec3 calculateBezierPoint(float t);
     
 public:

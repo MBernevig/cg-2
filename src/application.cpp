@@ -67,6 +67,8 @@ float frameTimeAccumulator = 0.0f;  // use this to add up skipped timesteps
 bool showMinimap = true;
 bool renderMainScene = true;
 bool drawCube = true;
+bool drawCurve = true;
+bool bezierLight = true;
 bool reflectMode = true;
 float refractionIndex = 1.0f;
 float cubeRotation = 0.5f;
@@ -134,9 +136,9 @@ public:
     }),
     m_curve({
         {40.0, 40.0, 40.0},
-        {-50.0, 20.0, 40.0},
+        {50.0, 20.0, 40.0},
         {40.0, 50.0, -60.0},
-        {-40.0, 40.0, -40.0},
+        {70.0, 40.0, -40.0},
     }){
         pFlyCamera = std::make_unique<Camera>(&m_window, utils::START_POSITION, utils::START_LOOK_AT);
         pMinimapCamera = std::make_unique<Camera>(&m_window, utils::START_POSITION, utils::START_LOOK_AT);
@@ -715,8 +717,17 @@ public:
                 renderCube();
             }
 
-            m_curve.drawCurve(m_lightShader, m_projectionMatrix * m_viewMatrix * m_modelMatrix);
+            if (drawCurve)
+            {
+                m_curve.drawCurve(m_lightShader, m_projectionMatrix * m_viewMatrix * m_modelMatrix);
+            }
 
+            if (bezierLight)
+            {
+                lum::Light *firstLight = &m_lightManager.m_lights[0];
+                firstLight->m_camera.m_position = m_curve.calculateBezierPoint(sin(glfwGetTime() / 2.0f) / 2.0f + 0.5f);
+            }
+            
             // Processes input and swaps the window buffer
             m_window.swapBuffers();
         }
@@ -790,6 +801,19 @@ public:
                     ImGui::Checkbox("Reflect Mode", &reflectMode);
                     ImGui::DragFloat("Refraction Index", &refractionIndex, 0.01f, 0.0f, 2.0f, "%.2f");
                     ImGui::DragFloat("Cube Rotation", &cubeRotation, 0.1f, 0.0f, 10.0f, "%.1f");
+                }
+            }
+            
+            if (ImGui::CollapsingHeader("Bezier Curve Settings"))
+            {
+                ImGui::Checkbox("Draw Bezier Curve", &drawCurve);
+                ImGui::Checkbox("Attach Light", &bezierLight);
+                ImGui::DragFloat3("First Control Point", glm::value_ptr(m_curve.m_controlPoints[0]), 5.0f, -100.0f, 100.0f, "%.2f");
+                ImGui::DragFloat3("Second Control Point", glm::value_ptr(m_curve.m_controlPoints[1]), 5.0f, -100.0f, 100.0f, "%.2f");
+                ImGui::DragFloat3("Third Control Point", glm::value_ptr(m_curve.m_controlPoints[2]), 5.0f, -100.0f, 100.0f, "%.2f");
+                ImGui::DragFloat3("Fourth Control Point", glm::value_ptr(m_curve.m_controlPoints[3]), 5.0f, -100.0f, 100.0f, "%.2f");
+                if (ImGui::Button("Redraw Curve")) {
+                    m_curve.updateCurvePoints();
                 }
             }
 
