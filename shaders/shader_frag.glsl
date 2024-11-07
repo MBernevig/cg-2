@@ -125,7 +125,11 @@ void main()
         normal = normalize(TBN * texNormal); 
     }
 
-    fragColor = vec4(vec3(0.1f) * fullColor, 1.f);
+     // Sample ambient light from skybox
+    vec3 ambientFactor = texture(skybox, vec3(vec2(normal.xy), -normal.z)).rgb;
+    vec3 ambient = 0.5 * ambientFactor * fullColor; // Scale ambient contribution
+    
+    fragColor = vec4(ambient, 1.0); // Start with ambient contribution
     float shadowFactor = 1.f;
 
     for(int i = 0; i < light_count; i++){
