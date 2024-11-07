@@ -16,6 +16,8 @@ add_executable(Master_TechDemo
 	"src/camera/camera.cpp"
 		src/lights/Lights.h
 		src/lights/lights.cpp
+		src/BezierCurve.cpp
+		src/BezierCurve.h
 )
 
 target_include_directories(Master_TechDemo PRIVATE "src/camera")

@@ -5,6 +5,7 @@
 // Can't wait for modules to fix this stuff...
 #include <framework/disable_all_warnings.h>
 
+#include "BezierCurve.h"
 #include "lights/lights.h"
 DISABLE_WARNINGS_PUSH()
 #include <glad/glad.h>
@@ -130,7 +131,13 @@ public:
     m_normalMap(RESOURCE_ROOT "resources/brickwall_normal.jpg"),
     m_lightManager({
         lum::Light(&m_window, glm::vec4(6.f, 3.f, -10.f, -0.f), glm::vec4(1.f, 1.f, 1.f, 0.f))
-    }) {
+    }),
+    m_curve({
+        {40.0, 40.0, 40.0},
+        {-50.0, 20.0, 40.0},
+        {40.0, 50.0, -60.0},
+        {-40.0, 40.0, -40.0},
+    }){
         pFlyCamera = std::make_unique<Camera>(&m_window, utils::START_POSITION, utils::START_LOOK_AT);
         pMinimapCamera = std::make_unique<Camera>(&m_window, utils::START_POSITION, utils::START_LOOK_AT);
         pTppCamera = std::make_unique<Camera>(&m_window, utils::START_POSITION, utils::START_LOOK_AT);
@@ -711,6 +718,8 @@ public:
                 renderCube();
             }
 
+            m_curve.drawCurve(m_lightShader, m_projectionMatrix * m_viewMatrix * m_modelMatrix);
+
             // Processes input and swaps the window buffer
             m_window.swapBuffers();
         }
@@ -924,6 +933,8 @@ private:
     bool m_useMaterial{true};
 
     lum::LightManager m_lightManager;
+
+    BezierCurve m_curve;
 
     // Projection and view matrices for you to fill in and use
     glm::mat4 m_projectionMatrix = glm::perspective(glm::radians(80.0f), 1.0f, 0.1f, 30.0f);
