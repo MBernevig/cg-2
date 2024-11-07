@@ -1,15 +1,16 @@
-# Blender 4.1.1 MTL File: 'scene2.blend'
+# Blender 4.2.1 LTS MTL File: 'None'
 # www.blender.org
 
 newmtl Material.001
-Ns 338.512451
+Ns 59.358681
 Ka 1.000000 1.000000 1.000000
 Ks 0.500000 0.500000 0.500000
 Ke 0.000000 0.000000 0.000000
-Ni 1.500000
+Ni 1.400000
 d 1.000000
 illum 3
 map_Kd brickwall.jpg
+map_Bump -bm 5.800000 brickwall_normal.jpg
 
 newmtl Material.002
 Ns 1000.000000
