@@ -146,6 +146,7 @@ void GPUMesh::moveInto(GPUMesh &&other)
 
     texture = other.texture;
     m_modelMatrix = other.m_modelMatrix;
+    normalMap = other.normalMap;
     renderFPV  = other.renderFPV;
     parentMatrix = other.parentMatrix;
 
