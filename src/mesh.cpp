@@ -190,21 +190,21 @@ void GPUMesh::attachToCamera(
     const glm::vec3& cameraUp,
     const glm::vec3& offset)  // Offset parameter with default (0,0,0)
 {
-    // Apply offset translation to the head position
-    m_modelMatrix = glm::translate(glm::mat4(1.0f), offset);
-
     // First, translate the model to the camera's position
-    m_modelMatrix = glm::translate(m_modelMatrix, cameraPos);
-
-
+    m_modelMatrix = glm::translate(glm::mat4(1.f), cameraPos);
     // Calculate the angle of rotation around the y-axis
     float angleY = atan2(cameraForward.x, cameraForward.z); // Use atan2 for better angle calculation
+    glm::mat4 rotationMatrix = glm::rotate(glm::mat4(1.0f), angleY, glm::vec3(0.0f, 1.0f, 0.0f));
+    m_modelMatrix *= rotationMatrix;
+
+    // Apply offset translation to the head position
+    m_modelMatrix = glm::translate(m_modelMatrix, offset);
+
+
 
     // Create a rotation matrix only around the Y axis
-    glm::mat4 rotationMatrix = glm::rotate(glm::mat4(1.0f), angleY, glm::vec3(0.0f, 1.0f, 0.0f));
 
     // Apply rotation
-    m_modelMatrix *= rotationMatrix;
 
     // Translate back by the inverse of the offset to maintain the correct positioning
     // m_modelMatrix = glm::translate(m_modelMatrix, -offset);

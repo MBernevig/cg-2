@@ -76,6 +76,7 @@ int shadowMode = 1;
 int pcfSampleCount = 4;
 
 bool drawArm = true;
+bool night = false;
 
 glm::vec3 translationArm1 {-2.3f, 4.8f, -0.2};
 glm::vec3 translationArm2 {0.0f, 0.9f, 2.5f};
@@ -313,6 +314,50 @@ public:
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
+
+
+        std::string nightFacesSkybox[6] = {
+            RESOURCE_ROOT "resources/textures/nightskybox/px.png",
+            RESOURCE_ROOT "resources/textures/nightskybox/nx.png",
+            RESOURCE_ROOT "resources/textures/nightskybox/py.png",
+            RESOURCE_ROOT "resources/textures/nightskybox/ny.png",
+            RESOURCE_ROOT "resources/textures/nightskybox/pz.png",
+            RESOURCE_ROOT "resources/textures/nightskybox/nz.png"};
+
+        unsigned int nightSkyboxTex;
+        glGenTextures(1, &nightSkyboxTex);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, nightSkyboxTex);
+
+        for (unsigned int i = 0; i < 6; i++)
+        {
+            int widthSky, heightSky, nrChannels;
+            unsigned char *data = stbi_load(nightFacesSkybox[i].c_str(), &widthSky, &heightSky, &nrChannels, 0);
+            if (data)
+            {
+                glTexImage2D(
+                    GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
+                    0,
+                    GL_RGBA,
+                    widthSky,
+                    heightSky,
+                    0,
+                    GL_RGBA,
+                    GL_UNSIGNED_BYTE,
+                    data);
+                stbi_image_free(data);
+            }
+            else
+            {
+                std::cout << "Cubemap texture failed to load at path: " << nightFacesSkybox[i] << std::endl;
+                stbi_image_free(data);
+            }
+        }
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
         std::vector<GPUMesh> arm1 = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/unitCube.obj");
         arm1[0].texture = std::make_shared<Texture>(RESOURCE_ROOT "resources/brickwall.jpg");
         std::vector<GPUMesh> arm2 = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/unitCube.obj");
@@ -377,7 +422,7 @@ public:
             glUniformMatrix3fv(m_cubeShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
 
             glActiveTexture(GL_TEXTURE2);
-            glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTex);
+            if(night) glBindTexture(GL_TEXTURE_CUBE_MAP, nightSkyboxTex); else glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTex);
             glUniform1i(m_cubeShader.getUniformLocation("skybox"), 2);
 
             glUniform1i(m_cubeShader.getUniformLocation("reflectMode"), (reflectMode? 1 : 0));
@@ -406,7 +451,7 @@ public:
             // glDepthMask(GL_FALSE);
             glBindVertexArray(skyboxVAO);
             glActiveTexture(GL_TEXTURE2);
-            glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTex);
+            if(night) glBindTexture(GL_TEXTURE_CUBE_MAP, nightSkyboxTex); else glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTex);
             glUniform1i(m_skyboxShader.getUniformLocation("skybox"), 2);
             glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
             glBindVertexArray(0);
@@ -447,7 +492,7 @@ public:
                 glUniform1i(m_defaultShader.getUniformLocation("useNormalMap"), mesh.normalMap != nullptr);
 
                 glActiveTexture(GL_TEXTURE2);
-                glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTex);
+                if(night) glBindTexture(GL_TEXTURE_CUBE_MAP, nightSkyboxTex); else glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTex);
                 glUniform1i(m_defaultShader.getUniformLocation("skybox"), 2);
                 if (mesh.hasTextureCoords())
                 {
@@ -639,6 +684,8 @@ public:
             {
 
                 tickCounter++;
+
+                if(tickCounter%(60*10) == 0) night = !night;
                 
                 cube[0].rotate(glm::radians(cubeRotation), glm::vec3(0,1,0));
                 frameTimeAccumulator -= fixedTimeStep;
