@@ -80,7 +80,7 @@ bool shadow_test(int lightIndex)
     return (shadowMapDepth + 0.0001 <= fragLightDepth);
 }
 
-float computeSoftShadow(int lightIndex)
+float computeSoftShadow(int lightIndex, vec3 normal)
 {
     vec3 fragLightCoord = get_frag_light_coord(lightIndex);
 
@@ -92,7 +92,7 @@ float computeSoftShadow(int lightIndex)
     float radius = 1.0 / 1024.0; 
     int totalSamples = 0;
     
-    vec3 norm = normalize(fragNormal);
+    vec3 norm = normalize(normal);
     vec3 lightDir = normalize(lights[lightIndex].position.xyz - fragPosition);
     float diff = max(dot(norm, lightDir), 0.0);
 
@@ -137,7 +137,7 @@ void main()
             shadowFactor = 1;
         } else if(shadow_test(i)) {
             if(shadowMode == 1) continue;
-            else shadowFactor = computeSoftShadow(i);
+            else shadowFactor = computeSoftShadow(i, normal);
         }
         // lambert
         fragColor += shadowFactor * lights[i].color * vec4(fullColor * dot(normal, normalize(lights[i].position.xyz - fragPosition)), 1.0);

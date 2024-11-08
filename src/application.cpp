@@ -75,6 +75,22 @@ float cubeRotation = 0.5f;
 int shadowMode = 1;
 int pcfSampleCount = 4;
 
+glm::vec3 translationArm1 {-2.3f, 4.8f, -0.2};
+glm::vec3 translationArm2 {0.0f, 0.9f, 2.5f};
+glm::vec3 translationArm3 {0.0f, 4.3f, 0.6f};
+
+glm::vec3 scaleArm1Dir {0.5f, 0.5f, 1.2f};
+glm::vec3 scaleArm2Dir {0.1f, 2.f, 0.1f};
+glm::vec3 scaleArm3Dir {0.2f, 0.4f, 0.8f};
+
+float rotationArm1 = 0.3f;
+float rotationArm2 = 0.0f;
+float rotationArm3 = 0.0f;
+
+glm::vec3 rotationAxisArm1 {1.f, 0.0f, 0.0f};
+glm::vec3 rotationAxisArm2 {0.0f, 1.0f, 0.0f};
+glm::vec3 rotationAxisArm3 {0.0f, 1.0f, 0.0f};
+
 std::unique_ptr<Camera> pFlyCamera;
 std::unique_ptr<Camera> pMinimapCamera;
 std::unique_ptr<Camera> pTppCamera;
@@ -158,7 +174,7 @@ public:
             else if (action == GLFW_RELEASE)
                 onMouseReleased(button, mods); });
 
-        m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/scene2.obj");
+        m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/scene1.obj");
 
         try
         {
@@ -295,7 +311,27 @@ public:
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
-        std::vector<GPUMesh> screen = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/unitCube.obj");
+        std::vector<GPUMesh> arm1 = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/unitCube.obj");
+        arm1[0].texture = std::make_shared<Texture>(RESOURCE_ROOT "resources/brickwall.jpg");
+        std::vector<GPUMesh> arm2 = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/unitCube.obj");
+        std::vector<GPUMesh> arm3 = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/unitCube.obj");
+
+        // Translate arm1 by (1, 5, 0)
+        // arm1[0].translate(glm::vec3(-1.f, 0.0f, 0.0f));
+        // Set arm2 parent to arm1 and translate arm2 by (0, 1, 0)
+        arm2[0].setParent(arm1[0]);
+        arm2[0].translate(glm::vec3(0.0f, 3.0f, 0.0f));
+
+        // Set arm3 parent to arm2 and translate arm3 by (0, 0, 1)
+        arm3[0].setParent(arm2[0]);
+        arm3[0].translate(glm::vec3(0.0f, 0.0f, 1.0f));
+        int arm1Index = m_meshes.size();
+        m_meshes.emplace_back(std::move(arm1[0]));
+        int arm2Index = m_meshes.size();
+        m_meshes.emplace_back(std::move(arm2[0]));
+        int arm3Index = m_meshes.size();
+        m_meshes.emplace_back(std::move(arm3[0]));
+
 
         std::vector<GPUMesh> character = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/character.obj");
 
@@ -328,14 +364,14 @@ public:
         // RENDER FUNCTIONS *********************************************************************************************
         auto renderCube = [&] {
             m_cubeShader.bind();
-            const glm::mat4 mvpMatrix = m_projectionMatrix * pFlyCamera->viewMatrix() * cube[0].modelMatrix;
+            const glm::mat4 mvpMatrix = m_projectionMatrix * pFlyCamera->viewMatrix() * cube[0].modelMatrix();
                 // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
                 // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
-            const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(cube[0].modelMatrix));
+            const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(cube[0].modelMatrix()));
 
             glUniform3fv(m_cubeShader.getUniformLocation("cameraPosition"), 1, glm::value_ptr(pFlyCamera->cameraPos()));
             glUniformMatrix4fv(m_cubeShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
-            glUniformMatrix4fv(m_cubeShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(cube[0].modelMatrix));
+            glUniformMatrix4fv(m_cubeShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(cube[0].modelMatrix()));
             glUniformMatrix3fv(m_cubeShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
 
             glActiveTexture(GL_TEXTURE2);
@@ -395,16 +431,16 @@ public:
 
             for (GPUMesh &mesh : m_meshes)
             {
-                const glm::mat4 mvpMatrix = m_projection2 * pMinimapCamera->viewMatrix() * mesh.modelMatrix;
+                const glm::mat4 mvpMatrix = m_projection2 * pMinimapCamera->viewMatrix() * mesh.modelMatrix();
                 // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
                 // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
-                const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(mesh.modelMatrix));
+                const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(mesh.modelMatrix()));
                 m_defaultShader.bind();
                 //!! IMPORTANT -> mesh.draw binds material to block 0, we bind lightBuffer to 1 instead.
                 m_defaultShader.bindUniformBlock("lightBuffer", 1, m_lightManager.m_UBO);
                 glUniform3fv(m_defaultShader.getUniformLocation("cameraPosition"), 1, glm::value_ptr(pFlyCamera->cameraPos()));
                 glUniformMatrix4fv(m_defaultShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
-                glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(mesh.modelMatrix));
+                glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(mesh.modelMatrix()));
                 glUniformMatrix3fv(m_defaultShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
                 glUniform1i(m_defaultShader.getUniformLocation("useNormalMap"), mesh.normalMap != nullptr);
 
@@ -533,18 +569,18 @@ public:
                 // Don't render character for FPV
                 if (currentCameraMode == CameraMode::FlyCamera && !mesh.renderFPV)
                     continue;
-                const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * mesh.modelMatrix;
+                const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * mesh.modelMatrix();
                 // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
                 // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
-                const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(mesh.modelMatrix));
+                const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(mesh.modelMatrix()));
                 shader.bind();
                 //!! IMPORTANT -> mesh.draw binds material to block 0, we bind lightBuffer to 1 instead.
                 shader.bindUniformBlock("lightBuffer", 1, m_lightManager.m_UBO);
                 glUniform3fv(shader.getUniformLocation("cameraPosition"), 1, glm::value_ptr(pFlyCamera->cameraPos()));
                 glUniformMatrix4fv(shader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
-                glUniformMatrix4fv(shader.getUniformLocation("meshModelMatrix"), 1, GL_FALSE, glm::value_ptr(mesh.modelMatrix));
-                // Uncomment this line when you use the modelMatrix (or fragmentPosition)
-                glUniformMatrix4fv(shader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(mesh.modelMatrix));
+                glUniformMatrix4fv(shader.getUniformLocation("meshModelMatrix"), 1, GL_FALSE, glm::value_ptr(mesh.modelMatrix()));
+                // Uncomment this line when you use the m_modelMatrix (or fragmentPosition)
+                glUniformMatrix4fv(shader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(mesh.modelMatrix()));
                 glUniformMatrix3fv(shader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
                 glUniform1i(shader.getUniformLocation("useNormalMap"), mesh.normalMap != nullptr);
                 if (mesh.hasTextureCoords())
@@ -601,6 +637,9 @@ public:
             {
 
                 tickCounter++;
+                m_meshes[arm1Index].setParent(*characterMesh);
+                m_meshes[arm2Index].setParent(m_meshes[arm1Index]);
+                m_meshes[arm3Index].setParent(m_meshes[arm2Index]);
                 cube[0].rotate(glm::radians(cubeRotation), glm::vec3(0,1,0));
                 frameTimeAccumulator -= fixedTimeStep;
             }
@@ -624,6 +663,21 @@ public:
             // Put your real-time logic and rendering in here
 
             imGui();
+
+            m_meshes[arm1Index].m_modelMatrix = glm::mat4(1.f);
+            m_meshes[arm1Index].scale(scaleArm1Dir);            
+            m_meshes[arm1Index].rotate(rotationArm1, rotationAxisArm1);
+            m_meshes[arm1Index].translate(translationArm1);
+
+            m_meshes[arm2Index].m_modelMatrix = glm::mat4(1.f);
+            m_meshes[arm2Index].scale(scaleArm2Dir);
+            m_meshes[arm2Index].rotate(rotationArm2, rotationAxisArm2);
+            m_meshes[arm2Index].translate(translationArm2);
+
+            m_meshes[arm3Index].m_modelMatrix = glm::mat4(1.f);
+            m_meshes[arm3Index].scale(scaleArm3Dir);
+            m_meshes[arm3Index].rotate(rotationArm3, rotationAxisArm3);
+            m_meshes[arm3Index].translate(translationArm3);
 
             m_lightManager.refreshUBOs();
 
@@ -738,6 +792,31 @@ public:
         // Use ImGui for easy input/output of ints, floats, strings, etc...
         ImGuiIO &io = ImGui::GetIO();
         ImGui::Begin("Window");
+
+        if (ImGui::CollapsingHeader("Arm Translation Controls"))
+        {
+            ImGui::DragFloat3("Translation Arm1", glm::value_ptr(translationArm1), 0.1f, -10.0f, 10.0f, "%.2f");
+            ImGui::DragFloat3("Translation Arm2", glm::value_ptr(translationArm2), 0.1f, -10.0f, 10.0f, "%.2f");
+            ImGui::DragFloat3("Translation Arm3", glm::value_ptr(translationArm3), 0.1f, -10.0f, 10.0f, "%.2f");
+        }
+
+        if (ImGui::CollapsingHeader("Arm Rotation Controls"))
+        {
+            ImGui::DragFloat("Rotation Arm1", &rotationArm1, 0.1f, -360.0f, 360.0f, "%.2f");
+            ImGui::DragFloat3("Rotation Axis Arm1", glm::value_ptr(rotationAxisArm1), 0.1f, -1.0f, 1.0f, "%.2f");
+            ImGui::DragFloat("Rotation Arm2", &rotationArm2, 0.1f, -360.0f, 360.0f, "%.2f");
+            ImGui::DragFloat3("Rotation Axis Arm2", glm::value_ptr(rotationAxisArm2), 0.1f, -1.0f, 1.0f, "%.2f");
+            ImGui::DragFloat("Rotation Arm3", &rotationArm3, 0.1f, -360.0f, 360.0f, "%.2f");
+            ImGui::DragFloat3("Rotation Axis Arm3", glm::value_ptr(rotationAxisArm3), 0.1f, -1.0f, 1.0f, "%.2f");
+        }
+
+        if (ImGui::CollapsingHeader("Arm Scale Controls"))
+        {
+            ImGui::DragFloat3("Scale Arm1", glm::value_ptr(scaleArm1Dir), 0.1f, 0.1f, 10.0f, "%.2f");
+            ImGui::DragFloat3("Scale Arm2", glm::value_ptr(scaleArm2Dir), 0.1f, 0.1f, 10.0f, "%.2f");
+            ImGui::DragFloat3("Scale Arm3", glm::value_ptr(scaleArm3Dir), 0.1f, 0.1f, 10.0f, "%.2f");
+        }
+
         ImGui::Checkbox("Use material if no texture", &m_useMaterial);
         ImGui::Text("Camera Mode");
         if (ImGui::BeginCombo("##combo", cameraModes[static_cast<int>(currentCameraMode)].c_str()))
@@ -918,6 +997,28 @@ public:
     void onMouseMove(const glm::dvec2 &cursorPos)
     {
         std::cout << "Mouse at position: " << cursorPos.x << " " << cursorPos.y << std::endl;
+        // Calculate the change in mouse position
+        // static glm::dvec2 lastCursorPos = cursorPos;
+        // glm::dvec2 delta = cursorPos - lastCursorPos;
+        // lastCursorPos = cursorPos;
+
+        // // Calculate the change in mouse position
+        // static glm::dvec2 lastCursorPos = cursorPos;
+        // glm::dvec2 delta = cursorPos - lastCursorPos;
+        // lastCursorPos = cursorPos;
+
+        // Calculate the rotation in degrees based on mouse movement
+        // float rotationDegreesX = static_cast<float>(-cursorPos.x / utils::WIDTH) * 5.f; // Adjust sensitivity as needed
+        // // float rotationDegreesY = static_cast<float>(delta.y / utils::HEIGHT) * 180.f; // Adjust sensitivity as needed
+
+        // // Update the rotation of arm1 based on the mouse movement
+        // rotationArm1 = rotationDegreesX;
+        // rotationArm1 = glm::clamp(rotationArm1, -45.0f, 45.0f);
+        // rotationArm2 += rotationDegreesY;
+
+        // Update the rotation of arm1 based on the mouse movement
+        // rotationArm1 += static_cast<float>(-delta.x / utils::WIDTH) * 180.f; // Adjust sensitivity as needed
+        // rotationArm2 += static_cast<float>(-delta.y / utils::HEIGHT) * 180.f; // Adjust sensitivity as needed
     }
 
     // If one of the mouse buttons is pressed this function will be called

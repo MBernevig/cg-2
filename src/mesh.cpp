@@ -19,7 +19,7 @@ GPUMaterial::GPUMaterial(const Material& material) :
 GPUMesh::GPUMesh(const Mesh& cpuMesh)
 {
 
-    modelMatrix = glm::mat4(1.0f); // Identity matrix by default
+    m_modelMatrix = glm::mat4(1.0f); // Identity matrix by default
 
     // Create uniform buffer to store mesh material (https://learnopengl.com/Advanced-OpenGL/Advanced-GLSL)
     GPUMaterial gpuMaterial(cpuMesh.material);
@@ -111,14 +111,30 @@ void GPUMesh::draw(const Shader& drawingShader)
     // Bind material data uniform (we assume that the uniform buffer objects is always called 'Material')
     // Yes, we could define the binding inside the shader itself, but that would break on OpenGL versions below 4.2
     drawingShader.bindUniformBlock("Material", 0, m_uboMaterial);
-    glUniformMatrix4fv(drawingShader.getUniformLocation("modelMatrix"),1,GL_FALSE, glm::value_ptr(modelMatrix));
+    glUniformMatrix4fv(drawingShader.getUniformLocation("modelMatrix"),1,GL_FALSE, glm::value_ptr(m_modelMatrix));
     
     // Draw the mesh's triangles
     glBindVertexArray(m_vao);
     glDrawElements(GL_TRIANGLES, m_numIndices, GL_UNSIGNED_INT, nullptr);
 }
 
-void GPUMesh::moveInto(GPUMesh&& other)
+glm::mat4 GPUMesh::modelMatrix()
+{
+    glm::mat4 parentMatrixNoScale = glm::mat4(1.0f);
+    parentMatrixNoScale[3] = parentMatrix[3]; // Copy translation
+    parentMatrixNoScale[0] = glm::normalize(parentMatrix[0]); // Copy and normalize x-axis
+    parentMatrixNoScale[1] = glm::normalize(parentMatrix[1]); // Copy and normalize y-axis
+    parentMatrixNoScale[2] = glm::normalize(parentMatrix[2]); // Copy and normalize z-axis
+    return parentMatrixNoScale * m_modelMatrix;
+}
+
+
+void GPUMesh::setParent(GPUMesh &other)
+{
+    parentMatrix = other.modelMatrix();
+}
+
+void GPUMesh::moveInto(GPUMesh &&other)
 {
     freeGpuMemory();
     m_numIndices = other.m_numIndices;
@@ -129,8 +145,9 @@ void GPUMesh::moveInto(GPUMesh&& other)
     m_uboMaterial = other.m_uboMaterial;
 
     texture = other.texture;
-    modelMatrix = other.modelMatrix;
+    m_modelMatrix = other.m_modelMatrix;
     renderFPV  = other.renderFPV;
+    parentMatrix = other.parentMatrix;
 
     other.m_numIndices = 0;
     other.m_hasTextureCoords = other.m_hasTextureCoords;
@@ -153,15 +170,15 @@ void GPUMesh::freeGpuMemory()
 }
 
 void GPUMesh::translate(const glm::vec3& offset) {
-    modelMatrix = glm::translate(modelMatrix, offset);
+    m_modelMatrix = glm::translate(m_modelMatrix, offset);
 }
 
 void GPUMesh::rotate(float angle, const glm::vec3& axis) {
-    modelMatrix = glm::rotate(modelMatrix, angle, axis);
+    m_modelMatrix = glm::rotate(m_modelMatrix, angle, axis);
 }
 
 void GPUMesh::scale(const glm::vec3& scaleFactors) {
-    modelMatrix = glm::scale(modelMatrix, scaleFactors);
+    m_modelMatrix = glm::scale(m_modelMatrix, scaleFactors);
 }
 
 
@@ -172,10 +189,10 @@ void GPUMesh::attachToCamera(
     const glm::vec3& offset)  // Offset parameter with default (0,0,0)
 {
     // Apply offset translation to the head position
-    modelMatrix = glm::translate(glm::mat4(1.0f), offset);
+    m_modelMatrix = glm::translate(glm::mat4(1.0f), offset);
 
     // First, translate the model to the camera's position
-    modelMatrix = glm::translate(modelMatrix, cameraPos);
+    m_modelMatrix = glm::translate(m_modelMatrix, cameraPos);
 
 
     // Calculate the angle of rotation around the y-axis
@@ -185,8 +202,8 @@ void GPUMesh::attachToCamera(
     glm::mat4 rotationMatrix = glm::rotate(glm::mat4(1.0f), angleY, glm::vec3(0.0f, 1.0f, 0.0f));
 
     // Apply rotation
-    modelMatrix *= rotationMatrix;
+    m_modelMatrix *= rotationMatrix;
 
     // Translate back by the inverse of the offset to maintain the correct positioning
-    // modelMatrix = glm::translate(modelMatrix, -offset);
+    // m_modelMatrix = glm::translate(m_modelMatrix, -offset);
 }
