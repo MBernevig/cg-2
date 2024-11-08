@@ -75,6 +75,8 @@ float cubeRotation = 0.5f;
 int shadowMode = 1;
 int pcfSampleCount = 4;
 
+bool drawArm = true;
+
 glm::vec3 translationArm1 {-2.3f, 4.8f, -0.2};
 glm::vec3 translationArm2 {0.0f, 0.9f, 2.5f};
 glm::vec3 translationArm3 {0.0f, 4.3f, 0.6f};
@@ -567,7 +569,7 @@ public:
             for (GPUMesh &mesh : m_meshes)
             {
                 // Don't render character for FPV
-                if (currentCameraMode == CameraMode::FlyCamera && !mesh.renderFPV)
+                if ((currentCameraMode == CameraMode::FlyCamera && !mesh.renderFPV) || !mesh.drawMe)
                     continue;
                 const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * mesh.modelMatrix();
                 // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
@@ -637,9 +639,7 @@ public:
             {
 
                 tickCounter++;
-                m_meshes[arm1Index].setParent(*characterMesh);
-                m_meshes[arm2Index].setParent(m_meshes[arm1Index]);
-                m_meshes[arm3Index].setParent(m_meshes[arm2Index]);
+                
                 cube[0].rotate(glm::radians(cubeRotation), glm::vec3(0,1,0));
                 frameTimeAccumulator -= fixedTimeStep;
             }
@@ -678,6 +678,14 @@ public:
             m_meshes[arm3Index].scale(scaleArm3Dir);
             m_meshes[arm3Index].rotate(rotationArm3, rotationAxisArm3);
             m_meshes[arm3Index].translate(translationArm3);
+
+            m_meshes[arm1Index].setParent(*characterMesh);
+            m_meshes[arm2Index].setParent(m_meshes[arm1Index]);
+            m_meshes[arm3Index].setParent(m_meshes[arm2Index]);
+
+            m_meshes[arm1Index].drawMe = drawArm;
+            m_meshes[arm2Index].drawMe = drawArm;
+            m_meshes[arm3Index].drawMe = drawArm;
 
             m_lightManager.refreshUBOs();
 
@@ -793,6 +801,8 @@ public:
         ImGuiIO &io = ImGui::GetIO();
         ImGui::Begin("Window");
 
+        ImGui::Checkbox("Draw Arm", &drawArm);
+
         if (ImGui::CollapsingHeader("Arm Translation Controls"))
         {
             ImGui::DragFloat3("Translation Arm1", glm::value_ptr(translationArm1), 0.1f, -10.0f, 10.0f, "%.2f");
@@ -816,6 +826,8 @@ public:
             ImGui::DragFloat3("Scale Arm2", glm::value_ptr(scaleArm2Dir), 0.1f, 0.1f, 10.0f, "%.2f");
             ImGui::DragFloat3("Scale Arm3", glm::value_ptr(scaleArm3Dir), 0.1f, 0.1f, 10.0f, "%.2f");
         }
+
+
 
         ImGui::Checkbox("Use material if no texture", &m_useMaterial);
         ImGui::Text("Camera Mode");

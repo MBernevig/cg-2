@@ -62,6 +62,7 @@ public:
     std::shared_ptr<Texture> normalMap = nullptr;
 
     bool renderFPV = true;
+    bool drawMe = true;
 
     glm::mat4 modelMatrix();
 
