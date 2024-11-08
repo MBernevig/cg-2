@@ -1,1 +1,3 @@
-# cg-2
+# cg-2 Tech Demo Assignment
+
+Authors: Mihnea Bernevig, Codrin Ogreanu

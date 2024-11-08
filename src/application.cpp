@@ -177,7 +177,7 @@ public:
             else if (action == GLFW_RELEASE)
                 onMouseReleased(button, mods); });
 
-        m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/scene1.obj");
+        m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/scene2.obj");
 
         try
         {
@@ -267,6 +267,40 @@ public:
         glGenBuffers(1, &quad_ibo);
 
         // END MINIMAP INITs ********************************************************************************************
+
+
+
+        
+
+        std::string screenPaths[20] = {
+            RESOURCE_ROOT "resources/screenanim/0001.png",
+            RESOURCE_ROOT "resources/screenanim/0002.png",
+            RESOURCE_ROOT "resources/screenanim/0003.png",
+            RESOURCE_ROOT "resources/screenanim/0004.png",
+            RESOURCE_ROOT "resources/screenanim/0005.png",
+            RESOURCE_ROOT "resources/screenanim/0006.png",
+            RESOURCE_ROOT "resources/screenanim/0007.png",
+            RESOURCE_ROOT "resources/screenanim/0008.png",
+            RESOURCE_ROOT "resources/screenanim/0009.png",
+            RESOURCE_ROOT "resources/screenanim/0010.png",
+            RESOURCE_ROOT "resources/screenanim/0011.png",
+            RESOURCE_ROOT "resources/screenanim/0012.png",
+            RESOURCE_ROOT "resources/screenanim/0013.png",
+            RESOURCE_ROOT "resources/screenanim/0014.png",
+            RESOURCE_ROOT "resources/screenanim/0015.png",
+            RESOURCE_ROOT "resources/screenanim/0016.png",
+            RESOURCE_ROOT "resources/screenanim/0017.png",
+            RESOURCE_ROOT "resources/screenanim/0018.png",
+            RESOURCE_ROOT "resources/screenanim/0019.png",
+            RESOURCE_ROOT "resources/screenanim/0020.png"
+        };
+
+        std::vector<std::shared_ptr<Texture>> screenTextures;
+        for (const auto &path : screenPaths)
+        {
+            screenTextures.push_back(std::make_shared<Texture>(path));
+        }
+        
 
         // EXTRA MESHES
 
@@ -382,11 +416,12 @@ public:
 
         std::vector<GPUMesh> character = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/character.obj");
 
-        // Add screen to m_meshes and keep a pointer to the added value
-        Texture screenTexture(RESOURCE_ROOT "resources/textures/doggos.jpg");
+        std::vector<GPUMesh> screen = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/screen.obj");
 
-        // screen[0].texture = &screenTexture;
-        // screenMesh->texture = &screenTexture;
+        screen[0].translate(glm::vec3(10,5,0));
+        screen[0].scale(glm::vec3(5,1,10));
+        m_meshes.emplace_back(std::move(screen[0]));
+        int screenIndex = m_meshes.size();
 
         m_meshes.emplace_back(std::move(character[0]));
         GPUMesh *characterMesh = &m_meshes.back();
@@ -686,6 +721,7 @@ public:
                 tickCounter++;
 
                 if(tickCounter%(60*10) == 0) night = !night;
+                m_meshes[m_meshes.size() - 2].texture = screenTextures[tickCounter/3 % 20];
                 
                 cube[0].rotate(glm::radians(cubeRotation), glm::vec3(0,1,0));
                 frameTimeAccumulator -= fixedTimeStep;
